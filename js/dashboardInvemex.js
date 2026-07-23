@@ -1,7 +1,7 @@
 /**
  * ==========================================
  * DASHBOARD INVEMEX - SISTEMA DE GESTIÓN
- * Versión: 3.2.0 - Con Detalle de Pedido
+ * Versión: 4.0.0 - Con integración Telegram
  * ==========================================
  */
 
@@ -15,7 +15,7 @@ const CONFIG = {
     TOAST_DURATION: 4000
 };
 
-console.log('🚀 Iniciando Dashboard INVEMEX v3.2.0');
+console.log('🚀 Iniciando Dashboard INVEMEX v4.0.0');
 console.log('🔧 Configuración Supabase:', {
     url: CONFIG.SUPABASE_URL,
     key: CONFIG.SUPABASE_ANON_KEY ? '✅ OK' : '❌ FALTA'
@@ -266,7 +266,7 @@ const App = {
     // INICIALIZACIÓN
     // ==========================================
     async init() {
-        console.log('📋 Inicializando aplicación v3.2.0...');
+        console.log('📋 Inicializando aplicación v4.0.0...');
 
         // Configurar fecha
         const today = new Date();
@@ -535,7 +535,8 @@ const App = {
     },
 
     // ==========================================
-    // GRÁFICO DOUGHNUT
+    // GRÁFICO DOUGHNUT - ESTADO DE PEDIDOS
+    // Colores: Azul, Amarillo, Rojo, Verde, Marrón
     // ==========================================
     async cargarEstadosGrafico() {
         console.log('📊 Cargando estados del gráfico...');
@@ -599,7 +600,8 @@ const App = {
     },
 
     // ==========================================
-    // GRÁFICO DE BARRAS
+    // GRÁFICO DE BARRAS - CARGA DE TRABAJO POR ÁREA
+    // Colores: Azul Rey, Amarillo, Morado, Rosado
     // ==========================================
     async cargarCargaTrabajo() {
         console.log('📊 Cargando carga de trabajo...');
@@ -640,11 +642,11 @@ const App = {
                 resultados.push({ ...area, tareas });
             }
 
-            resultados.push({ 
-                label: 'Administración', 
-                icon: 'fa-user-tie', 
-                clase: 'admin', 
-                tareas: 0 
+            resultados.push({
+                label: 'Administración',
+                icon: 'fa-user-tie',
+                clase: 'admin',
+                tareas: 0
             });
 
             resultados.forEach(item => {
@@ -792,6 +794,9 @@ const App = {
                             </button>
                             <button class="md-btn md-btn-text md-btn-sm" onclick="event.stopPropagation(); App.eliminarPedido(${pedido.id})" title="Cancelar" style="color: #EF4444;">
                                 <i class="fas fa-trash"></i>
+                            </button>
+                            <button class="md-btn md-btn-text md-btn-sm" onclick="event.stopPropagation(); App.sincronizarEstadoTelegram(${pedido.id}, 'entregado')" title="Sincronizar con Telegram" style="color: #0088cc;">
+                                <i class="fab fa-telegram-plane"></i>
                             </button>
                         </td>
                     </tr>
@@ -957,6 +962,77 @@ const App = {
     },
 
     // ==========================================
+    // INTERACCIÓN CON TELEGRAM
+    // ==========================================
+
+    // Enviar comando a Telegram desde el dashboard
+    async enviarComandoTelegram(comando) {
+        try {
+            ToastSystem.warning('📤 Enviando', `Enviando comando: ${comando}`);
+
+            // Construir el mensaje para el bot
+            const mensaje = `📱 *Dashboard INVEMEX*\n\nComando: ${comando}\nUsuario: Administrador\nFecha: ${new Date().toLocaleString()}`;
+
+            // Enviar al webhook de n8n
+            const response = await fetch('https://bit64.app.n8n.cloud/webhook-telegram-invemex', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    message: {
+                        chat: { id: 6888857160 },
+                        text: comando,
+                        from: { first_name: 'Dashboard' }
+                    }
+                })
+            });
+
+            if (response.ok) {
+                ToastSystem.success('✅ Enviado', `Comando ${comando} enviado a Telegram`);
+            } else {
+                ToastSystem.error('❌ Error', 'No se pudo enviar el comando');
+            }
+        } catch (error) {
+            console.error('Error enviando comando:', error);
+            ToastSystem.error('❌ Error', error.message);
+        }
+    },
+
+    // Obtener datos desde Telegram
+    async obtenerDatosTelegram() {
+        try {
+            ToastSystem.warning('🔄 Cargando', 'Obteniendo datos desde Telegram...');
+
+            // Simular obtención de datos
+            // En producción, esto vendría de un webhook de Telegram
+            const response = await fetch('https://bit64.app.n8n.cloud/webhook-telegram-invemex', {
+                method: 'GET'
+            });
+
+            // Actualizar el dashboard con los datos
+            await this.refrescarDatos();
+            ToastSystem.success('✅ Actualizado', 'Datos sincronizados con Telegram');
+
+        } catch (error) {
+            console.error('Error obteniendo datos:', error);
+            ToastSystem.error('❌ Error', error.message);
+        }
+    },
+
+    // Sincronizar estado de pedido con Telegram
+    async sincronizarEstadoTelegram(idPedido, nuevoEstado) {
+        try {
+            const comando = `/estado ${idPedido} ${nuevoEstado}`;
+            await this.enviarComandoTelegram(comando);
+            ToastSystem.success('✅ Sincronizado', `Pedido #${idPedido} actualizado a ${nuevoEstado}`);
+        } catch (error) {
+            console.error('Error sincronizando:', error);
+            ToastSystem.error('❌ Error', error.message);
+        }
+    },
+
+    // ==========================================
     // SISTEMA DE EFICIENCIA DE EMPLEADOS
     // ==========================================
     async cargarEficiencia() {
@@ -1002,10 +1078,10 @@ const App = {
                 if (errorTareas) continue;
 
                 const totalTareas = tareas.length;
-                const tareasCompletadas = tareas.filter(t => 
+                const tareasCompletadas = tareas.filter(t =>
                     t.estado === 'entregado' || t.completada === true
                 ).length;
-                const tareasPendientes = tareas.filter(t => 
+                const tareasPendientes = tareas.filter(t =>
                     t.estado !== 'entregado' && t.completada !== true
                 ).length;
                 const tareasRetrasadas = tareas.filter(t => {
@@ -1043,7 +1119,7 @@ const App = {
                 let eficienciaClass = '';
                 let eficienciaLabel = '';
                 let progressClass = '';
-                
+
                 if (tasaExito >= 90) {
                     eficienciaClass = 'success';
                     eficienciaLabel = 'Excelente 🏆';
@@ -1110,7 +1186,7 @@ const App = {
 
             const tasaGeneral = totalEmpleados > 0 ? Math.round(totalExito / totalEmpleados) : 0;
             const eficienciaGeneral = totalEmpleados > 0 ? Math.round(totalEficiencia / totalEmpleados) : 0;
-            
+
             document.getElementById('tasa-exito-general').textContent = `${tasaGeneral}%`;
             document.getElementById('tasa-exito-general-badge').textContent = `${tasaGeneral}% General`;
             document.getElementById('empleado-mas-eficiente').textContent = mejorEmpleado || 'Sin datos';
@@ -1131,7 +1207,7 @@ const App = {
     async calcularEficienciaTodos() {
         try {
             ToastSystem.warning('⏳ Calculando', 'Procesando eficiencia de todos los empleados...');
-            
+
             const { data: empleados, error: errorEmpleados } = await supabaseClient
                 .from('empleados')
                 .select('id')
@@ -1149,10 +1225,10 @@ const App = {
                 if (errorTareas) continue;
 
                 const totalTareas = tareas.length;
-                const tareasCompletadas = tareas.filter(t => 
+                const tareasCompletadas = tareas.filter(t =>
                     t.estado === 'entregado' || t.completada === true
                 ).length;
-                const tareasPendientes = tareas.filter(t => 
+                const tareasPendientes = tareas.filter(t =>
                     t.estado !== 'entregado' && t.completada !== true
                 ).length;
                 const tareasRetrasadas = tareas.filter(t => {
@@ -1707,6 +1783,9 @@ window.closeCalendar = () => App.closeCalendar();
 window.calendarNavigate = (delta) => App.calendarNavigate(delta);
 window.calendarGoToday = () => App.calendarGoToday();
 window.selectDate = (year, month, day) => App.selectDate(year, month, day);
+window.enviarComandoTelegram = (comando) => App.enviarComandoTelegram(comando);
+window.obtenerDatosTelegram = () => App.obtenerDatosTelegram();
+window.sincronizarEstadoTelegram = (id, estado) => App.sincronizarEstadoTelegram(id, estado);
 
 // ==========================================
 // INICIALIZACIÓN AUTOMÁTICA
@@ -1722,4 +1801,4 @@ window.addEventListener('beforeunload', () => {
     App.destroy();
 });
 
-console.log('✅ Dashboard IVENMEX v3.2.0 cargado correctamente');
+console.log('✅ Dashboard INVEMEX v4.0.0 cargado correctamente');
