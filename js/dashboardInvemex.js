@@ -1,0 +1,1725 @@
+/**
+ * ==========================================
+ * DASHBOARD INVEMEX - SISTEMA DE GESTIÓN
+ * Versión: 3.2.0 - Con Detalle de Pedido
+ * ==========================================
+ */
+
+// ==========================================
+// CONFIGURACIÓN SUPABASE
+// ==========================================
+const CONFIG = {
+    SUPABASE_URL: 'https://ubyesdxizxywfwysechk.supabase.co',
+    SUPABASE_ANON_KEY: 'sb_publishable_ocKHSbzB3BuoZRWu4GvCFQ_fonZWWgQ',
+    REFRESH_INTERVAL: 30000,
+    TOAST_DURATION: 4000
+};
+
+console.log('🚀 Iniciando Dashboard INVEMEX v3.2.0');
+console.log('🔧 Configuración Supabase:', {
+    url: CONFIG.SUPABASE_URL,
+    key: CONFIG.SUPABASE_ANON_KEY ? '✅ OK' : '❌ FALTA'
+});
+
+// ==========================================
+// CLIENTE SUPABASE
+// ==========================================
+const supabaseClient = supabase.createClient(
+    CONFIG.SUPABASE_URL,
+    CONFIG.SUPABASE_ANON_KEY
+);
+console.log('✅ Supabase inicializado correctamente');
+
+// ==========================================
+// CACHE Y ESTADO GLOBAL
+// ==========================================
+const STATE = {
+    clientes: [],
+    productos: [],
+    pedidos: [],
+    urgentes: [],
+    loading: false,
+    refreshInterval: null
+};
+
+// ==========================================
+// SISTEMA DE TOAST NOTIFICATIONS (MD3)
+// ==========================================
+const ToastSystem = {
+    container: null,
+
+    init() {
+        this.container = document.getElementById('toast-container');
+        if (!this.container) {
+            this.container = document.createElement('div');
+            this.container.id = 'toast-container';
+            this.container.className = 'md-toast-container';
+            document.body.appendChild(this.container);
+        }
+    },
+
+    show(title, message, type = 'success') {
+        if (!this.container) this.init();
+
+        const icons = {
+            success: 'fa-check-circle',
+            error: 'fa-exclamation-circle',
+            warning: 'fa-exclamation-triangle'
+        };
+
+        const toast = document.createElement('div');
+        toast.className = `md-toast ${type}`;
+        toast.innerHTML = `
+            <div class="toast-icon"><i class="fas ${icons[type] || icons.success}"></i></div>
+            <div class="toast-content">
+                <div class="toast-title">${title}</div>
+                <div class="toast-message">${message}</div>
+            </div>
+            <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+        `;
+
+        this.container.appendChild(toast);
+
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateX(40px) scale(0.95)';
+            setTimeout(() => toast.remove(), 400);
+        }, CONFIG.TOAST_DURATION);
+    },
+
+    success(title, message) {
+        this.show(title, message, 'success');
+    },
+
+    error(title, message) {
+        this.show(title, message, 'error');
+    },
+
+    warning(title, message) {
+        this.show(title, message, 'warning');
+    }
+};
+
+// ==========================================
+// SISTEMA DE FECHAS
+// ==========================================
+const DateFormatter = {
+    formatLong() {
+        const fecha = new Date();
+        const opciones = {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            weekday: 'long'
+        };
+        return fecha.toLocaleDateString('es-ES', opciones);
+    },
+
+    formatISO(fecha) {
+        if (!fecha) return '-';
+        const d = new Date(fecha);
+        return d.toLocaleDateString('es-ES');
+    },
+
+    getToday() {
+        return new Date().toISOString().split('T')[0];
+    }
+};
+
+// ==========================================
+// MAPEADORES DE ESTADOS
+// ==========================================
+const StateMappers = {
+    estadoClass: {
+        'urgente': 'danger',
+        'producción': 'warning',
+        'en diseño': 'primary',
+        'completado': 'success',
+        'en_produccion': 'warning',
+        'diseño': 'primary',
+        'control_calidad': 'default',
+        'cotizando': 'default',
+        'listo': 'success',
+        'entregado': 'success',
+        'cancelado': 'default'
+    },
+
+    estadoLabel: {
+        'cotizando': 'Cotizando',
+        'diseño': 'En Diseño',
+        'en_produccion': 'Producción',
+        'control_calidad': 'Control Calidad',
+        'listo': 'Listo',
+        'entregado': 'Entregado',
+        'cancelado': 'Cancelado'
+    },
+
+    areaMap: {
+        'diseño': 'Diseño',
+        'cotizando': 'Administración',
+        'en_produccion': 'Producción',
+        'control_calidad': 'Control Calidad',
+        'listo': 'Entregas',
+        'entregado': 'Entregas',
+        'cancelado': 'Administración'
+    },
+
+    responsableMap: {
+        'diseño': 'Jhonn',
+        'cotizando': 'Nieves',
+        'en_produccion': 'Patricia/Mauricio',
+        'control_calidad': 'Liliana',
+        'listo': 'Nieves',
+        'entregado': 'Nieves',
+        'cancelado': 'Liliana'
+    },
+
+    getEstadoClass(estado) {
+        return this.estadoClass[estado] || 'default';
+    },
+
+    getEstadoLabel(estado) {
+        return this.estadoLabel[estado] || estado;
+    },
+
+    getArea(estado) {
+        return this.areaMap[estado] || 'Administración';
+    },
+
+    getResponsable(estado) {
+        return this.responsableMap[estado] || 'Pendiente';
+    }
+};
+
+// ==========================================
+// SISTEMA DE ERRORES
+// ==========================================
+const ErrorHandler = {
+    show(message) {
+        const cont = document.getElementById('error-container');
+        if (!cont) return;
+
+        cont.innerHTML = `
+            <div style="background:#FEF2F2; border:1px solid #FECACA; border-radius:12px; padding:20px; max-width:500px; text-align:left;">
+                <strong style="color: #991B1B; display:block; margin-bottom:8px;">
+                    <i class="fas fa-exclamation-circle"></i> Error
+                </strong>
+                <pre style="background:white; padding:12px; border-radius:8px; font-size:13px; max-height:150px; overflow:auto; color:#1A1A1A; border:1px solid #EEEEEE;">${message}</pre>
+                <button class="md-btn md-btn-primary mt-3" onclick="App.reintentar()">
+                    <i class="fas fa-redo"></i> Reintentar
+                </button>
+            </div>
+        `;
+    },
+
+    clear() {
+        const cont = document.getElementById('error-container');
+        if (cont) cont.innerHTML = '';
+    }
+};
+
+// ==========================================
+// SISTEMA DE LOADING
+// ==========================================
+const LoadingSystem = {
+    show(text = 'Cargando...') {
+        document.getElementById('loading-text').textContent = text;
+        document.getElementById('loading-overlay').style.display = 'flex';
+    },
+
+    hide() {
+        document.getElementById('loading-overlay').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+    },
+
+    setText(text) {
+        document.getElementById('loading-text').textContent = text;
+    }
+};
+
+// ==========================================
+// SISTEMA DE CONTADOR DE TABLA
+// ==========================================
+const TableCounter = {
+    update() {
+        const tbody = document.getElementById('tabla-urgentes-body');
+        const countEl = document.getElementById('total-registros');
+        if (!countEl || !tbody) return;
+
+        const filas = tbody.querySelectorAll('tr:not(:has(.md-empty))');
+        const total = filas.length;
+
+        if (tbody.querySelector('.md-empty')) {
+            countEl.textContent = '0';
+            return;
+        }
+
+        countEl.textContent = total;
+    }
+};
+
+// ==========================================
+// APLICACIÓN PRINCIPAL
+// ==========================================
+const App = {
+    // ==========================================
+    // INICIALIZACIÓN
+    // ==========================================
+    async init() {
+        console.log('📋 Inicializando aplicación v3.2.0...');
+
+        // Configurar fecha
+        const today = new Date();
+        this.calendarState.selectedDate = new Date(today);
+        this.calendarState.currentDate = new Date(today);
+        this.updateDateDisplay(today);
+
+        // Inicializar Toast
+        ToastSystem.init();
+
+        // Cargar datos
+        await this.cargarTodosLosDatos();
+
+        // Auto-refresh
+        STATE.refreshInterval = setInterval(() => {
+            this.refrescarDatos();
+        }, CONFIG.REFRESH_INTERVAL);
+
+        console.log('✅ Aplicación inicializada correctamente');
+    },
+
+    // ==========================================
+    // MD3 - CALENDARIO DESPLEGABLE
+    // ==========================================
+    calendarState: {
+        currentDate: new Date(),
+        selectedDate: new Date(),
+        isOpen: false
+    },
+
+    toggleCalendar() {
+        if (this.calendarState.isOpen) {
+            this.closeCalendar();
+        } else {
+            this.openCalendar();
+        }
+    },
+
+    openCalendar() {
+        this.calendarState.isOpen = true;
+        const dropdown = document.getElementById('calendar-dropdown');
+        const overlay = document.getElementById('calendar-overlay');
+        if (dropdown) dropdown.classList.add('active');
+        if (overlay) overlay.classList.add('active');
+        this.renderCalendar();
+    },
+
+    closeCalendar() {
+        this.calendarState.isOpen = false;
+        const dropdown = document.getElementById('calendar-dropdown');
+        const overlay = document.getElementById('calendar-overlay');
+        if (dropdown) dropdown.classList.remove('active');
+        if (overlay) overlay.classList.remove('active');
+    },
+
+    calendarNavigate(delta) {
+        const newDate = new Date(this.calendarState.currentDate);
+        newDate.setMonth(newDate.getMonth() + delta);
+        this.calendarState.currentDate = newDate;
+        this.renderCalendar();
+    },
+
+    calendarGoToday() {
+        const today = new Date();
+        this.calendarState.currentDate = new Date(today);
+        this.calendarState.selectedDate = new Date(today);
+        this.renderCalendar();
+        this.closeCalendar();
+        this.updateDateDisplay(today);
+        ToastSystem.success('📅 Calendario', 'Fecha actualizada al día de hoy');
+    },
+
+    renderCalendar() {
+        const year = this.calendarState.currentDate.getFullYear();
+        const month = this.calendarState.currentDate.getMonth();
+        const today = new Date();
+        const selected = this.calendarState.selectedDate;
+
+        const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        const monthYearEl = document.getElementById('calendar-month-year');
+        if (monthYearEl) monthYearEl.textContent = `${monthNames[month]} ${year}`;
+
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        let startOffset = firstDay === 0 ? 6 : firstDay - 1;
+
+        const weekNumber = this.getWeekNumber(new Date(year, month, 1));
+        const infoEl = document.getElementById('calendar-info');
+        if (infoEl) infoEl.textContent = `Semana ${weekNumber}`;
+
+        const grid = document.getElementById('calendar-grid');
+        if (!grid) return;
+
+        const weekdays = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+        let html = '';
+        weekdays.forEach(day => {
+            html += `<div class="weekday">${day}</div>`;
+        });
+
+        const prevMonthDays = new Date(year, month, 0).getDate();
+        for (let i = startOffset - 1; i >= 0; i--) {
+            const day = prevMonthDays - i;
+            html += `<div class="day other-month">${day}</div>`;
+        }
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dateObj = new Date(year, month, day);
+            const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+            const isSelected = day === selected.getDate() && month === selected.getMonth() && year === selected.getFullYear();
+
+            let classes = 'day';
+            if (isToday) classes += ' today';
+            if (isSelected) classes += ' selected';
+
+            html += `<div class="${classes}" onclick="App.selectDate(${year}, ${month}, ${day})">${day}</div>`;
+        }
+
+        const totalCells = startOffset + daysInMonth;
+        const remainingCells = (7 - (totalCells % 7)) % 7;
+        for (let day = 1; day <= remainingCells; day++) {
+            html += `<div class="day other-month">${day}</div>`;
+        }
+
+        grid.innerHTML = html;
+    },
+
+    selectDate(year, month, day) {
+        const selectedDate = new Date(year, month, day);
+        this.calendarState.selectedDate = selectedDate;
+        this.calendarState.currentDate = new Date(selectedDate);
+        this.updateDateDisplay(selectedDate);
+        this.renderCalendar();
+        this.closeCalendar();
+
+        const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' };
+        ToastSystem.success('📅 Fecha seleccionada', selectedDate.toLocaleDateString('es-ES', options));
+    },
+
+    updateDateDisplay(date) {
+        const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' };
+        const dateStr = date.toLocaleDateString('es-ES', options);
+        const fechaEl = document.getElementById('fecha-texto');
+        if (fechaEl) {
+            fechaEl.textContent = dateStr;
+        }
+    },
+
+    getWeekNumber(date) {
+        const startOfYear = new Date(date.getFullYear(), 0, 1);
+        const diff = (date - startOfYear + (startOfYear.getTimezoneOffset() - date.getTimezoneOffset()) * 60000) / 86400000;
+        return Math.ceil((diff + startOfYear.getDay() + 1) / 7);
+    },
+
+    // ==========================================
+    // MD3 - ACCORDION TOGGLE
+    // ==========================================
+    toggleAccordion(id) {
+        const element = document.getElementById(id);
+        if (element) {
+            element.classList.toggle('active');
+        }
+    },
+
+    // ==========================================
+    // CARGA DE DATOS
+    // ==========================================
+    async cargarTodosLosDatos() {
+        try {
+            LoadingSystem.show('Cargando datos del dashboard...');
+            await this.cargarDatos();
+            LoadingSystem.hide();
+            ToastSystem.success('✅ Listo', 'Dashboard actualizado correctamente');
+        } catch (error) {
+            console.error('❌ Error en carga inicial:', error);
+            ErrorHandler.show(error.message || 'Error al cargar los datos');
+            LoadingSystem.setText('⚠️ Error al cargar datos');
+        }
+    },
+
+    async cargarDatos() {
+        console.log('📊 Cargando datos desde Supabase...');
+
+        try {
+            await Promise.all([
+                this.cargarKPI(),
+                this.cargarEstadosGrafico(),
+                this.cargarCargaTrabajo(),
+                this.cargarPedidosUrgentes(),
+                this.cargarEficiencia()
+            ]);
+
+            console.log('✅ Todos los datos cargados correctamente');
+            TableCounter.update();
+
+        } catch (error) {
+            console.error('❌ Error en cargarDatos:', error);
+            throw error;
+        }
+    },
+
+    // ==========================================
+    // KPI CARDS
+    // ==========================================
+    async cargarKPI() {
+        console.log('📊 Cargando KPI...');
+
+        const hoy = DateFormatter.getToday();
+
+        try {
+            const [
+                { count: activos },
+                { count: produccion },
+                { count: entregados },
+                { count: urgentes }
+            ] = await Promise.all([
+                supabaseClient
+                    .from('pedidos')
+                    .select('*', { count: 'exact', head: true })
+                    .not('estado', 'in', '(entregado,cancelado)'),
+
+                supabaseClient
+                    .from('pedidos')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('estado', 'en_produccion'),
+
+                supabaseClient
+                    .from('pedidos')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('estado', 'entregado')
+                    .gte('fecha_solicitud', hoy),
+
+                supabaseClient
+                    .from('pedidos')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('prioridad', 'urgente')
+                    .not('estado', 'in', '(entregado,cancelado)')
+            ]);
+
+            const kpiElements = {
+                'kpi-activos': activos || 0,
+                'kpi-activos-change': `${activos || 0} activos`,
+                'kpi-produccion': produccion || 0,
+                'kpi-produccion-change': `${produccion || 0} en producción`,
+                'kpi-entregados': entregados || 0,
+                'kpi-entregados-change': `${entregados || 0} hoy`,
+                'kpi-urgentes': urgentes || 0,
+                'kpi-urgentes-change': `${urgentes || 0} urgentes`
+            };
+
+            Object.entries(kpiElements).forEach(([id, value]) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = value;
+            });
+
+            const badge = document.getElementById('notificaciones-badge');
+            if (badge) badge.textContent = urgentes || 0;
+
+            const urgentesBadge = document.getElementById('urgentes-count-badge');
+            if (urgentesBadge) urgentesBadge.textContent = urgentes || 0;
+
+            console.log('✅ KPI cargados:', { activos, produccion, entregados, urgentes });
+
+        } catch (error) {
+            console.error('Error cargando KPI:', error);
+        }
+    },
+
+    // ==========================================
+    // GRÁFICO DOUGHNUT
+    // ==========================================
+    async cargarEstadosGrafico() {
+        console.log('📊 Cargando estados del gráfico...');
+
+        const estados = ['cotizando', 'diseño', 'en_produccion', 'control_calidad', 'listo', 'entregado'];
+        const labels = ['Cotizando', 'Diseño', 'Producción', 'Control Calidad', 'Listo', 'Entregado'];
+        const colores = ['#0B218B', '#1A3BA8', '#FFF200', '#E84C3D', '#27AE60', '#8B6914'];
+
+        try {
+            const resultados = [];
+            let total = 0;
+
+            for (let i = 0; i < estados.length; i++) {
+                const { count } = await supabaseClient
+                    .from('pedidos')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('estado', estados[i]);
+
+                const valor = count || 0;
+                resultados.push({ label: labels[i], value: valor, color: colores[i] });
+                total += valor;
+            }
+
+            const chart = document.getElementById('doughnut-chart');
+            if (chart) {
+                chart.setAttribute('data-total', total);
+
+                if (total > 0) {
+                    let grad = 'conic-gradient(';
+                    let acumulado = 0;
+                    resultados.forEach((item, index) => {
+                        const porcentaje = (item.value / total) * 100;
+                        const inicio = acumulado;
+                        const fin = acumulado + porcentaje;
+                        grad += `${item.color} ${inicio}% ${fin}%`;
+                        if (index < resultados.length - 1) grad += ', ';
+                        acumulado = fin;
+                    });
+                    grad += ')';
+                    chart.style.background = grad;
+                } else {
+                    chart.style.background = 'conic-gradient(#EEEEEE 0% 100%)';
+                }
+            }
+
+            const legend = document.getElementById('doughnut-legend');
+            if (legend) {
+                legend.innerHTML = resultados.map(item => `
+                    <div class="legend-item" style="display:flex; align-items:center; gap:10px; font-size:14px; color: var(--md-text); padding:4px 0;">
+                        <span style="width:14px; height:14px; border-radius:4px; background:${item.color}; flex-shrink:0; border:1px solid rgba(0,0,0,0.06);"></span>
+                        ${item.label}: ${item.value}
+                    </div>
+                `).join('');
+            }
+
+            console.log('✅ Estados del gráfico cargados');
+
+        } catch (error) {
+            console.error('Error cargando estados:', error);
+        }
+    },
+
+    // ==========================================
+    // GRÁFICO DE BARRAS
+    // ==========================================
+    async cargarCargaTrabajo() {
+        console.log('📊 Cargando carga de trabajo...');
+
+        const areas = [
+            { nombre: 'diseño', label: 'Diseño', icon: 'fa-paint-brush', clase: 'design' },
+            { nombre: 'corte', label: 'Corte', icon: 'fa-cut', clase: 'corte' },
+            { nombre: 'sublimacion', label: 'Sublimación', icon: 'fa-hotjar', clase: 'sublimacion' }
+        ];
+
+        const gradientesMap = {
+            'design': 'linear-gradient(90deg, #0B218B, #1A3BA8)',
+            'corte': 'linear-gradient(90deg, #FFF200, #F5E600)',
+            'sublimacion': 'linear-gradient(90deg, #6C3483, #8E44AD)',
+            'admin': 'linear-gradient(90deg, #D81B60, #E74C8B)'
+        };
+
+        const coloresMap = {
+            'design': '#0B218B',
+            'corte': '#FFF200',
+            'sublimacion': '#8E44AD',
+            'admin': '#E74C8B'
+        };
+
+        try {
+            const resultados = [];
+            let maxTareas = 1;
+
+            for (const area of areas) {
+                const { count } = await supabaseClient
+                    .from('tareas')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('tipo_tarea', area.nombre)
+                    .in('estado', ['pendiente', 'en_progreso']);
+
+                const tareas = count || 0;
+                if (tareas > maxTareas) maxTareas = tareas;
+                resultados.push({ ...area, tareas });
+            }
+
+            resultados.push({ 
+                label: 'Administración', 
+                icon: 'fa-user-tie', 
+                clase: 'admin', 
+                tareas: 0 
+            });
+
+            resultados.forEach(item => {
+                item.porcentaje = maxTareas > 0 ? (item.tareas / maxTareas) * 100 : 0;
+            });
+
+            const container = document.getElementById('bar-chart');
+            if (container) {
+                container.innerHTML = resultados.map(item => {
+                    const gradiente = gradientesMap[item.clase] || 'linear-gradient(90deg, #0B218B, #1A3BA8)';
+                    const textColor = item.clase === 'corte' ? '#1A1A1A' : 'white';
+                    const color = coloresMap[item.clase] || '#0B218B';
+
+                    return `
+                        <div class="bar-item" style="display:flex; align-items:center; gap:14px; margin-bottom:14px;">
+                            <span class="bar-label" style="font-size:14px; font-weight:600; min-width:120px; color: var(--md-text);">
+                                <i class="fas ${item.icon}" style="color: ${color};"></i> ${item.label}
+                            </span>
+                            <div class="bar-track" style="flex:1; height:28px; background: var(--md-gray); border-radius:14px; overflow:hidden; position:relative;">
+                                <div class="bar-fill ${item.clase}" style="width: ${item.porcentaje}%; height:100%; border-radius:14px; transition: width 1.2s cubic-bezier(0.4, 0, 0.2, 1); display:flex; align-items:center; justify-content:flex-end; padding-right:14px; color:${textColor}; font-size:13px; font-weight:700; background: ${gradiente};">
+                                    ${item.tareas} tareas
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            console.log('✅ Carga de trabajo cargada');
+
+        } catch (error) {
+            console.error('Error cargando carga de trabajo:', error);
+        }
+    },
+
+    // ==========================================
+    // TABLA DE PEDIDOS URGENTES
+    // ==========================================
+    async cargarPedidosUrgentes() {
+        console.log('📊 Consultando pedidos urgentes...');
+
+        try {
+            const { data, error } = await supabaseClient
+                .from('pedidos')
+                .select(`
+                    id,
+                    cliente_id,
+                    estado,
+                    prioridad,
+                    observaciones,
+                    fecha_solicitud,
+                    fecha_entrega_prometida,
+                    clientes (nombre),
+                    detalles_pedido (
+                        producto_id,
+                        material_especifico,
+                        tiempo_estimado_minutos,
+                        productos (nombre)
+                    ),
+                    tareas (
+                        empleado_id,
+                        fecha_inicio,
+                        fecha_fin,
+                        estado,
+                        empleados (nombre, apellido)
+                    )
+                `)
+                .eq('prioridad', 'urgente')
+                .not('estado', 'in', '(entregado,cancelado)')
+                .order('fecha_solicitud', { ascending: false })
+                .limit(10);
+
+            if (error) {
+                console.error('❌ Error al cargar urgentes:', error);
+                throw error;
+            }
+
+            console.log('✅ Pedidos urgentes encontrados:', data?.length || 0);
+
+            const tbody = document.getElementById('tabla-urgentes-body');
+            if (!tbody) return;
+
+            if (!data || data.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="10">
+                            <div class="md-empty">
+                                <div class="empty-icon"><i class="fas fa-inbox"></i></div>
+                                <div class="empty-title">No hay pedidos urgentes</div>
+                                <div class="empty-description">Los pedidos urgentes aparecerán aquí automáticamente</div>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = data.map(pedido => {
+                const detalle = pedido.detalles_pedido?.[0] || {};
+                const producto = detalle.productos || {};
+                const tarea = pedido.tareas?.[0] || {};
+                const empleado = tarea.empleados || {};
+
+                const fechaInicio = pedido.fecha_solicitud ?
+                    new Date(pedido.fecha_solicitud).toLocaleDateString('es-ES') :
+                    'No definida';
+                const fechaEntrega = pedido.fecha_entrega_prometida ?
+                    new Date(pedido.fecha_entrega_prometida).toLocaleDateString('es-ES') :
+                    'No definida';
+                const fechaFin = tarea.fecha_fin ?
+                    new Date(tarea.fecha_fin).toLocaleDateString('es-ES') :
+                    'En proceso';
+
+                const responsable = empleado.nombre ?
+                    `${empleado.nombre} ${empleado.apellido || ''}`.trim() :
+                    'Sin asignar';
+
+                const descripcion = pedido.observaciones || 'Sin descripción';
+                const tareaCliente = detalle.material_especifico || producto.nombre || 'Sin tarea';
+                const estadoPedido = StateMappers.getEstadoLabel(pedido.estado);
+                const estadoClass = StateMappers.getEstadoClass(pedido.estado);
+
+                return `
+                    <tr class="clickable-row" onclick="App.verPedidoDetalle(${pedido.id})">
+                        <td><strong style="color: var(--md-primary);">#${pedido.id}</strong></td>
+                        <td>${pedido.clientes?.nombre || 'Sin cliente'}</td>
+                        <td style="max-width: 150px; word-wrap: break-word;">${descripcion}</td>
+                        <td>${tareaCliente}</td>
+                        <td>${responsable}</td>
+                        <td>${fechaInicio}</td>
+                        <td>${fechaEntrega}</td>
+                        <td>${fechaFin}</td>
+                        <td>
+                            <span class="md-badge ${estadoClass}">${estadoPedido}</span>
+                        </td>
+                        <td>
+                            <button class="md-btn md-btn-text md-btn-sm" onclick="event.stopPropagation(); App.verPedidoDetalle(${pedido.id})" title="Ver">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="md-btn md-btn-text md-btn-sm" onclick="event.stopPropagation(); App.abrirModalEditarPedido(${pedido.id})" title="Editar">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="md-btn md-btn-text md-btn-sm" onclick="event.stopPropagation(); App.completarPedido(${pedido.id})" title="Completar" style="color: #22C55E;">
+                                <i class="fas fa-check"></i>
+                            </button>
+                            <button class="md-btn md-btn-text md-btn-sm" onclick="event.stopPropagation(); App.eliminarPedido(${pedido.id})" title="Cancelar" style="color: #EF4444;">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            TableCounter.update();
+
+        } catch (error) {
+            console.error('Error cargando pedidos urgentes:', error);
+        }
+    },
+
+    // ==========================================
+    // VER DETALLE DE PEDIDO (Modal de visualización)
+    // ==========================================
+    verPedidoDetalle(id) {
+        console.log('📋 Cargando detalles del pedido #' + id);
+
+        const modalBody = document.getElementById('modal-detalle-body');
+        const pedidoId = document.getElementById('detalle-pedido-id');
+        if (pedidoId) pedidoId.textContent = '#' + id;
+
+        if (modalBody) {
+            modalBody.innerHTML = `
+                <div style="text-align:center; padding:30px;">
+                    <i class="fas fa-spinner fa-spin" style="font-size:32px; color: var(--md-primary);"></i>
+                    <p style="margin-top:12px; color: var(--md-text-secondary);">Cargando detalles del pedido...</p>
+                </div>
+            `;
+        }
+
+        const modal = new bootstrap.Modal(document.getElementById('modalDetallePedido'));
+        modal.show();
+
+        this.buscarYMostrarDetalle(id);
+    },
+
+    async buscarYMostrarDetalle(id) {
+        try {
+            const { data, error } = await supabaseClient
+                .from('pedidos')
+                .select(`
+                    id,
+                    estado,
+                    prioridad,
+                    observaciones,
+                    fecha_solicitud,
+                    fecha_entrega_prometida,
+                    clientes (nombre, telefono, email),
+                    detalles_pedido (
+                        cantidad,
+                        medida_ancho_cm,
+                        medida_alto_cm,
+                        material_especifico,
+                        tiempo_estimado_minutos,
+                        productos (nombre, categoria, material)
+                    ),
+                    tareas (
+                        estado,
+                        fecha_inicio,
+                        fecha_fin,
+                        tipo_tarea,
+                        empleados (nombre, apellido, cargo)
+                    )
+                `)
+                .eq('id', id)
+                .single();
+
+            if (error) throw error;
+
+            if (data) {
+                const detalle = data.detalles_pedido?.[0] || {};
+                const producto = detalle.productos || {};
+                const tarea = data.tareas?.[0] || {};
+                const empleado = tarea.empleados || {};
+                const cliente = data.clientes || {};
+
+                const estadoColor = StateMappers.getEstadoClass(data.estado);
+                const estadoLabel = StateMappers.getEstadoLabel(data.estado);
+
+                const modalBody = document.getElementById('modal-detalle-body');
+                if (modalBody) {
+                    modalBody.innerHTML = `
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <div class="detail-card">
+                                    <div class="detail-label"><i class="fas fa-user" style="color: var(--md-primary);"></i> Cliente</div>
+                                    <div class="detail-value">${cliente.nombre || 'Sin cliente'}</div>
+                                    ${cliente.telefono ? `<small style="color: var(--md-text-secondary);"><i class="fas fa-phone"></i> ${cliente.telefono}</small>` : ''}
+                                    ${cliente.email ? `<small style="color: var(--md-text-secondary); display:block;"><i class="fas fa-envelope"></i> ${cliente.email}</small>` : ''}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="detail-card">
+                                    <div class="detail-label"><i class="fas fa-box" style="color: var(--md-primary);"></i> Producto</div>
+                                    <div class="detail-value">${producto.nombre || 'Sin producto'}</div>
+                                    <small style="color: var(--md-text-secondary);">${producto.categoria || ''} ${producto.material ? '| ' + producto.material : ''}</small>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="detail-card">
+                                    <div class="detail-label"><i class="fas fa-ruler-combined" style="color: var(--md-primary);"></i> Medidas</div>
+                                    <div class="detail-value">${detalle.medida_ancho_cm && detalle.medida_alto_cm ? `${detalle.medida_ancho_cm} x ${detalle.medida_alto_cm} cm` : 'No definido'}</div>
+                                    <small style="color: var(--md-text-secondary);">Cantidad: ${detalle.cantidad || 1}</small>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="detail-card">
+                                    <div class="detail-label"><i class="fas fa-clock" style="color: var(--md-primary);"></i> Tiempo Estimado</div>
+                                    <div class="detail-value">${detalle.tiempo_estimado_minutos ? `${detalle.tiempo_estimado_minutos} min` : 'No definido'}</div>
+                                    <small style="color: var(--md-text-secondary);">Material: ${detalle.material_especifico || producto.material || 'No especificado'}</small>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="detail-card">
+                                    <div class="detail-label"><i class="fas fa-user-tie" style="color: var(--md-primary);"></i> Asignado a</div>
+                                    <div class="detail-value">${empleado.nombre ? `${empleado.nombre} ${empleado.apellido || ''}` : 'Sin asignar'}</div>
+                                    <small style="color: var(--md-text-secondary);">${empleado.cargo || 'Sin cargo'} | ${tarea.tipo_tarea || 'Sin tarea'}</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="detail-card">
+                                    <div class="detail-label"><i class="fas fa-calendar-alt" style="color: var(--md-primary);"></i> Fechas</div>
+                                    <div class="detail-value" style="font-size:14px;">
+                                        <span><strong>Inicio:</strong> ${data.fecha_solicitud ? new Date(data.fecha_solicitud).toLocaleDateString('es-ES') : 'No definida'}</span><br>
+                                        <span><strong>Entrega:</strong> ${data.fecha_entrega_prometida ? new Date(data.fecha_entrega_prometida).toLocaleDateString('es-ES') : 'No definida'}</span><br>
+                                        <span><strong>Fin:</strong> ${tarea.fecha_fin ? new Date(tarea.fecha_fin).toLocaleDateString('es-ES') : 'En proceso'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="detail-card">
+                                    <div class="detail-label"><i class="fas fa-info-circle" style="color: var(--md-primary);"></i> Información Adicional</div>
+                                    <div class="detail-value">
+                                        <span class="md-badge ${estadoColor}">${estadoLabel}</span>
+                                        ${data.prioridad === 'urgente' ? '<span class="md-badge danger" style="margin-left:8px;">Urgente</span>' : ''}
+                                    </div>
+                                    ${data.observaciones ? `<p style="margin-top:8px; font-size:13px; color: var(--md-text-secondary);"><strong>Observaciones:</strong> ${data.observaciones}</p>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                console.log('✅ Detalles del pedido cargados');
+            }
+
+        } catch (error) {
+            console.error('❌ Error cargando detalle:', error);
+            const modalBody = document.getElementById('modal-detalle-body');
+            if (modalBody) {
+                modalBody.innerHTML = `
+                    <div style="text-align:center; padding:30px; color: #EF4444;">
+                        <i class="fas fa-exclamation-circle" style="font-size:32px; display:block; margin-bottom:12px;"></i>
+                        <p>Error al cargar los detalles del pedido</p>
+                        <small style="color: var(--md-text-secondary);">${error.message}</small>
+                    </div>
+                `;
+            }
+            ToastSystem.error('Error', 'No se pudo cargar el detalle del pedido');
+        }
+    },
+
+    // ==========================================
+    // SISTEMA DE EFICIENCIA DE EMPLEADOS
+    // ==========================================
+    async cargarEficiencia() {
+        console.log('📊 Cargando eficiencia de empleados...');
+
+        try {
+            const { data: empleados, error: errorEmpleados } = await supabaseClient
+                .from('empleados')
+                .select('id, nombre, apellido, cargo')
+                .eq('activo', true);
+
+            if (errorEmpleados) throw errorEmpleados;
+
+            const tbody = document.getElementById('tbody-eficiencia');
+            if (!tbody) return;
+
+            if (!empleados || empleados.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="9" style="text-align:center; padding:40px; color: var(--md-text-secondary);">
+                            <i class="fas fa-inbox" style="font-size:32px; display:block; margin-bottom:12px; opacity:0.15;"></i>
+                            No hay empleados registrados
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            let totalExito = 0;
+            let totalEficiencia = 0;
+            let totalEmpleados = 0;
+            let mejorEmpleado = '';
+            let mejorTasa = 0;
+
+            let html = '';
+
+            for (const empleado of empleados) {
+                const { data: tareas, error: errorTareas } = await supabaseClient
+                    .from('tareas')
+                    .select('*')
+                    .eq('empleado_id', empleado.id);
+
+                if (errorTareas) continue;
+
+                const totalTareas = tareas.length;
+                const tareasCompletadas = tareas.filter(t => 
+                    t.estado === 'entregado' || t.completada === true
+                ).length;
+                const tareasPendientes = tareas.filter(t => 
+                    t.estado !== 'entregado' && t.completada !== true
+                ).length;
+                const tareasRetrasadas = tareas.filter(t => {
+                    if (t.completada !== true && t.estado !== 'entregado') return false;
+                    if (!t.fecha_fin_real || !t.fecha_fin) return false;
+                    return new Date(t.fecha_fin_real) > new Date(t.fecha_fin);
+                }).length;
+                const tareasATiempo = tareas.filter(t => {
+                    if (t.completada !== true && t.estado !== 'entregado') return false;
+                    if (!t.fecha_fin_real || !t.fecha_fin) return false;
+                    return new Date(t.fecha_fin_real) <= new Date(t.fecha_fin);
+                }).length;
+
+                let tasaExito = 0;
+                if (tareasCompletadas > 0) {
+                    tasaExito = (tareasATiempo / tareasCompletadas) * 100;
+                }
+
+                let tasaEficiencia = 0;
+                if (totalTareas > 0) {
+                    tasaEficiencia = (tareasCompletadas / totalTareas) * 100;
+                }
+
+                const tareasCompletadasList = tareas.filter(t => t.completada === true || t.estado === 'entregado');
+                let tiempoEstimadoProm = 0;
+                let tiempoRealProm = 0;
+
+                if (tareasCompletadasList.length > 0) {
+                    const sumEstimado = tareasCompletadasList.reduce((sum, t) => sum + (t.tiempo_estimado_minutos || 0), 0);
+                    const sumReal = tareasCompletadasList.reduce((sum, t) => sum + (t.tiempo_real_minutos || 0), 0);
+                    tiempoEstimadoProm = Math.round(sumEstimado / tareasCompletadasList.length);
+                    tiempoRealProm = Math.round(sumReal / tareasCompletadasList.length);
+                }
+
+                let eficienciaClass = '';
+                let eficienciaLabel = '';
+                let progressClass = '';
+                
+                if (tasaExito >= 90) {
+                    eficienciaClass = 'success';
+                    eficienciaLabel = 'Excelente 🏆';
+                    progressClass = 'success';
+                } else if (tasaExito >= 70) {
+                    eficienciaClass = 'primary';
+                    eficienciaLabel = 'Bueno 👍';
+                    progressClass = 'primary';
+                } else if (tasaExito >= 50) {
+                    eficienciaClass = 'warning';
+                    eficienciaLabel = 'Regular ⚠️';
+                    progressClass = 'warning';
+                } else if (tasaExito > 0) {
+                    eficienciaClass = 'danger';
+                    eficienciaLabel = 'Necesita Mejorar 🔴';
+                    progressClass = 'danger';
+                } else if (tasaEficiencia > 0) {
+                    eficienciaClass = 'warning';
+                    eficienciaLabel = 'Sin Éxito 📊';
+                    progressClass = 'warning';
+                } else {
+                    eficienciaClass = 'default';
+                    eficienciaLabel = 'Sin Datos 📊';
+                    progressClass = 'default';
+                }
+
+                const barraExito = Math.round(tasaExito);
+
+                html += `
+                    <tr>
+                        <td><strong style="color: var(--md-text);">${empleado.nombre} ${empleado.apellido || ''}</strong></td>
+                        <td>${empleado.cargo || 'Sin cargo'}</td>
+                        <td><span class="md-badge success">${tareasCompletadas}</span></td>
+                        <td><span class="md-badge warning">${tareasPendientes}</span></td>
+                        <td><span class="md-badge danger">${tareasRetrasadas}</span></td>
+                        <td>
+                            <div style="display:flex; align-items:center; gap:12px;">
+                                <div class="md-progress" style="width:100px;">
+                                    <div class="progress-fill ${progressClass}" style="width: ${barraExito}%;"></div>
+                                </div>
+                                <span style="font-weight:600; font-size:14px; min-width:40px;">${barraExito}%</span>
+                            </div>
+                        </td>
+                        <td>${tiempoEstimadoProm > 0 ? `${tiempoEstimadoProm} min` : '-'}</td>
+                        <td>${tiempoRealProm > 0 ? `${tiempoRealProm} min` : '-'}</td>
+                        <td>
+                            <span class="md-badge ${eficienciaClass}">${eficienciaLabel}</span>
+                        </td>
+                    </tr>
+                `;
+
+                if (tareasCompletadas > 0) {
+                    totalExito += tasaExito;
+                    totalEficiencia += tasaEficiencia;
+                    totalEmpleados++;
+                    if (tasaExito > mejorTasa) {
+                        mejorTasa = tasaExito;
+                        mejorEmpleado = `${empleado.nombre} ${empleado.apellido || ''}`;
+                    }
+                }
+            }
+
+            tbody.innerHTML = html;
+
+            const tasaGeneral = totalEmpleados > 0 ? Math.round(totalExito / totalEmpleados) : 0;
+            const eficienciaGeneral = totalEmpleados > 0 ? Math.round(totalEficiencia / totalEmpleados) : 0;
+            
+            document.getElementById('tasa-exito-general').textContent = `${tasaGeneral}%`;
+            document.getElementById('tasa-exito-general-badge').textContent = `${tasaGeneral}% General`;
+            document.getElementById('empleado-mas-eficiente').textContent = mejorEmpleado || 'Sin datos';
+
+            console.log('✅ Eficiencia de empleados cargada');
+            console.log(`📊 Tasa de Éxito General: ${tasaGeneral}%`);
+            console.log(`📈 Tasa de Eficiencia General: ${eficienciaGeneral}%`);
+
+        } catch (error) {
+            console.error('❌ Error cargando eficiencia:', error);
+            ToastSystem.error('Error', 'No se pudo cargar la eficiencia de empleados');
+        }
+    },
+
+    // ==========================================
+    // CALCULAR EFICIENCIA DE TODOS LOS EMPLEADOS
+    // ==========================================
+    async calcularEficienciaTodos() {
+        try {
+            ToastSystem.warning('⏳ Calculando', 'Procesando eficiencia de todos los empleados...');
+            
+            const { data: empleados, error: errorEmpleados } = await supabaseClient
+                .from('empleados')
+                .select('id')
+                .eq('activo', true);
+
+            if (errorEmpleados) throw errorEmpleados;
+
+            let actualizados = 0;
+            for (const emp of empleados) {
+                const { data: tareas, error: errorTareas } = await supabaseClient
+                    .from('tareas')
+                    .select('*')
+                    .eq('empleado_id', emp.id);
+
+                if (errorTareas) continue;
+
+                const totalTareas = tareas.length;
+                const tareasCompletadas = tareas.filter(t => 
+                    t.estado === 'entregado' || t.completada === true
+                ).length;
+                const tareasPendientes = tareas.filter(t => 
+                    t.estado !== 'entregado' && t.completada !== true
+                ).length;
+                const tareasRetrasadas = tareas.filter(t => {
+                    if (t.completada !== true && t.estado !== 'entregado') return false;
+                    if (!t.fecha_fin_real || !t.fecha_fin) return false;
+                    return new Date(t.fecha_fin_real) > new Date(t.fecha_fin);
+                }).length;
+                const tareasATiempo = tareas.filter(t => {
+                    if (t.completada !== true && t.estado !== 'entregado') return false;
+                    if (!t.fecha_fin_real || !t.fecha_fin) return false;
+                    return new Date(t.fecha_fin_real) <= new Date(t.fecha_fin);
+                }).length;
+
+                let tasaExito = 0;
+                if (tareasCompletadas > 0) {
+                    tasaExito = (tareasATiempo / tareasCompletadas) * 100;
+                }
+
+                let tasaEficiencia = 0;
+                if (totalTareas > 0) {
+                    tasaEficiencia = (tareasCompletadas / totalTareas) * 100;
+                }
+
+                const tareasCompletadasList = tareas.filter(t => t.completada === true || t.estado === 'entregado');
+                let tiempoEstimadoProm = 0;
+                let tiempoRealProm = 0;
+
+                if (tareasCompletadasList.length > 0) {
+                    const sumEstimado = tareasCompletadasList.reduce((sum, t) => sum + (t.tiempo_estimado_minutos || 0), 0);
+                    const sumReal = tareasCompletadasList.reduce((sum, t) => sum + (t.tiempo_real_minutos || 0), 0);
+                    tiempoEstimadoProm = Math.round(sumEstimado / tareasCompletadasList.length);
+                    tiempoRealProm = Math.round(sumReal / tareasCompletadasList.length);
+                }
+
+                await supabaseClient
+                    .from('eficiencia_empleados')
+                    .upsert({
+                        empleado_id: emp.id,
+                        fecha: new Date().toISOString().split('T')[0],
+                        tareas_completadas: tareasCompletadas,
+                        tareas_pendientes: tareasPendientes,
+                        tareas_retrasadas: tareasRetrasadas,
+                        tareas_a_tiempo: tareasATiempo,
+                        tiempo_promedio_estimado: tiempoEstimadoProm,
+                        tiempo_promedio_real: tiempoRealProm,
+                        tasa_exito: Math.round(tasaExito),
+                        tasa_eficiencia: Math.round(tasaEficiencia)
+                    }, { onConflict: 'empleado_id, fecha' });
+
+                actualizados++;
+            }
+
+            ToastSystem.success('✅ Completado', `Eficiencia calculada para ${actualizados} empleados`);
+            await this.cargarEficiencia();
+
+        } catch (error) {
+            console.error('Error calculando eficiencia:', error);
+            ToastSystem.error('Error', 'No se pudo calcular la eficiencia');
+        }
+    },
+
+    // ==========================================
+    // REFRESCAR DATOS
+    // ==========================================
+    async refrescarDatos() {
+        const icon = document.getElementById('btn-refresh-icon');
+        if (icon) icon.classList.add('fa-spin');
+
+        LoadingSystem.setText('⏳ Actualizando datos...');
+
+        try {
+            await this.cargarDatos();
+            LoadingSystem.setText('✅ Datos actualizados');
+            ToastSystem.success('✅ Actualizado', 'Datos del dashboard actualizados correctamente');
+        } catch (error) {
+            console.error('❌ Error al refrescar:', error);
+            ToastSystem.error('❌ Error', 'No se pudieron actualizar los datos');
+            ErrorHandler.show(error.message);
+        } finally {
+            if (icon) icon.classList.remove('fa-spin');
+        }
+    },
+
+    // ==========================================
+    // REINTENTAR
+    // ==========================================
+    reintentar() {
+        ErrorHandler.clear();
+        LoadingSystem.show('⏳ Reintentando conexión...');
+        this.cargarTodosLosDatos();
+    },
+
+    // ==========================================
+    // CRUD - CLIENTES
+    // ==========================================
+    async cargarClientes() {
+        try {
+            const { data, error } = await supabaseClient
+                .from('clientes')
+                .select('*')
+                .order('nombre');
+
+            if (error) throw error;
+            STATE.clientes = data || [];
+
+            const select = document.getElementById('pedido_cliente');
+            if (select) {
+                select.innerHTML = '<option value="">Seleccionar cliente...</option>';
+                STATE.clientes.forEach(cliente => {
+                    select.innerHTML += `<option value="${cliente.id}">${cliente.nombre}</option>`;
+                });
+            }
+
+            const tbody = document.getElementById('tbody-clientes');
+            if (!tbody) return;
+
+            if (!STATE.clientes.length) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="text-align:center; padding:30px; color: var(--md-text-secondary);">
+                            No hay clientes registrados
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = STATE.clientes.map(cliente => `
+                <tr>
+                    <td>${cliente.id}</td>
+                    <td>${cliente.nombre}</td>
+                    <td>${cliente.telefono || '-'}</td>
+                    <td>${cliente.email || '-'}</td>
+                    <td>
+                        <button class="md-btn md-btn-text md-btn-sm" onclick="App.eliminarCliente(${cliente.id})" title="Eliminar" style="color: #EF4444;">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+
+        } catch (error) {
+            console.error('Error clientes:', error);
+            ToastSystem.error('Error', 'No se pudieron cargar los clientes');
+        }
+    },
+
+    async guardarNuevoCliente() {
+        const nombre = document.getElementById('cliente_nombre').value.trim();
+        if (!nombre) {
+            ToastSystem.error('Error', 'El nombre es obligatorio');
+            return;
+        }
+
+        try {
+            const { error } = await supabaseClient
+                .from('clientes')
+                .insert({
+                    nombre: nombre,
+                    telefono: document.getElementById('cliente_telefono').value.trim() || null,
+                    email: document.getElementById('cliente_email').value.trim() || null,
+                    direccion: document.getElementById('cliente_direccion').value.trim() || null
+                });
+
+            if (error) throw error;
+
+            ToastSystem.success('✅ Cliente creado', `Cliente "${nombre}" registrado exitosamente`);
+            const modal = bootstrap.Modal.getInstance(document.getElementById('modalNuevoCliente'));
+            if (modal) modal.hide();
+            document.getElementById('formNuevoCliente').reset();
+            await this.cargarClientes();
+
+        } catch (error) {
+            console.error('Error guardar cliente:', error);
+            ToastSystem.error('Error', 'No se pudo guardar el cliente');
+        }
+    },
+
+    async eliminarCliente(id) {
+        const cliente = STATE.clientes.find(c => c.id === id);
+        if (!confirm(`¿Eliminar cliente "${cliente?.nombre}"?`)) return;
+
+        try {
+            const { error } = await supabaseClient
+                .from('clientes')
+                .delete()
+                .eq('id', id);
+
+            if (error) throw error;
+
+            ToastSystem.success('✅ Cliente eliminado', 'Cliente eliminado correctamente');
+            await this.cargarClientes();
+
+        } catch (error) {
+            console.error('Error eliminar cliente:', error);
+            ToastSystem.error('Error', 'No se pudo eliminar el cliente');
+        }
+    },
+
+    // ==========================================
+    // CRUD - PRODUCTOS
+    // ==========================================
+    async cargarProductos() {
+        try {
+            const { data, error } = await supabaseClient
+                .from('productos')
+                .select('*')
+                .order('nombre');
+
+            if (error) throw error;
+            STATE.productos = data || [];
+
+            const select = document.getElementById('pedido_producto');
+            if (select) {
+                select.innerHTML = '<option value="">Seleccionar producto...</option>';
+                STATE.productos.forEach(producto => {
+                    select.innerHTML += `<option value="${producto.id}">${producto.nombre}</option>`;
+                });
+            }
+
+            const tbody = document.getElementById('tbody-productos');
+            if (!tbody) return;
+
+            if (!STATE.productos.length) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" style="text-align:center; padding:30px; color: var(--md-text-secondary);">
+                            No hay productos registrados
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = STATE.productos.map(producto => `
+                <tr>
+                    <td>${producto.id}</td>
+                    <td>${producto.nombre}</td>
+                    <td>${producto.categoria || '-'}</td>
+                    <td>${producto.material || '-'}</td>
+                    <td>${producto.precio_por_m2 || producto.precio_unitario || '0.00'}</td>
+                    <td>
+                        <button class="md-btn md-btn-text md-btn-sm" onclick="App.eliminarProducto(${producto.id})" title="Eliminar" style="color: #EF4444;">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+
+        } catch (error) {
+            console.error('Error productos:', error);
+            ToastSystem.error('Error', 'No se pudieron cargar los productos');
+        }
+    },
+
+    async guardarNuevoProducto() {
+        const nombre = document.getElementById('producto_nombre').value.trim();
+        if (!nombre) {
+            ToastSystem.error('Error', 'El nombre es obligatorio');
+            return;
+        }
+
+        const tipoPrecio = document.getElementById('producto_tipo_precio').value;
+        const precio = parseFloat(document.getElementById('producto_precio').value) || 0;
+
+        try {
+            const dataInsert = {
+                nombre: nombre,
+                categoria: document.getElementById('producto_categoria').value || null,
+                material: document.getElementById('producto_material').value.trim() || null,
+                tipo_producto: tipoPrecio === 'm2' ? 'servicio' : 'producto',
+                tipo_precio: tipoPrecio,
+                velocidad_impresion_m2_hora: parseFloat(document.getElementById('producto_velocidad').value) || null,
+                activo: true
+            };
+
+            if (tipoPrecio === 'm2') {
+                dataInsert.precio_por_m2 = precio;
+            } else {
+                dataInsert.precio_unitario = precio;
+            }
+
+            const { error } = await supabaseClient
+                .from('productos')
+                .insert(dataInsert);
+
+            if (error) throw error;
+
+            ToastSystem.success('✅ Producto creado', `"${nombre}" registrado exitosamente`);
+            const modal = bootstrap.Modal.getInstance(document.getElementById('modalNuevoProducto'));
+            if (modal) modal.hide();
+            document.getElementById('formNuevoProducto').reset();
+            await this.cargarProductos();
+
+        } catch (error) {
+            console.error('Error guardar producto:', error);
+            ToastSystem.error('Error', 'No se pudo guardar el producto');
+        }
+    },
+
+    async eliminarProducto(id) {
+        if (!confirm('¿Eliminar este producto?')) return;
+
+        try {
+            const { error } = await supabaseClient
+                .from('productos')
+                .update({ activo: false })
+                .eq('id', id);
+
+            if (error) throw error;
+
+            ToastSystem.success('✅ Producto eliminado', 'Producto eliminado correctamente');
+            await this.cargarProductos();
+
+        } catch (error) {
+            console.error('Error eliminar producto:', error);
+            ToastSystem.error('Error', 'No se pudo eliminar el producto');
+        }
+    },
+
+    // ==========================================
+    // CRUD - PEDIDOS
+    // ==========================================
+    async guardarNuevoPedido() {
+        const clienteId = document.getElementById('pedido_cliente').value;
+        const productoId = document.getElementById('pedido_producto').value;
+
+        if (!clienteId || !productoId) {
+            ToastSystem.error('Error', 'Cliente y producto son obligatorios');
+            return;
+        }
+
+        try {
+            const { data: pedido, error: errorPedido } = await supabaseClient
+                .from('pedidos')
+                .insert({
+                    cliente_id: parseInt(clienteId),
+                    prioridad: document.getElementById('pedido_prioridad').value || 'normal',
+                    fecha_entrega_prometida: document.getElementById('pedido_fecha_entrega').value || null,
+                    observaciones: document.getElementById('pedido_observaciones').value.trim() || null,
+                    estado: 'cotizando'
+                })
+                .select();
+
+            if (errorPedido) throw errorPedido;
+
+            const pedidoId = pedido[0].id;
+
+            const cantidad = parseInt(document.getElementById('pedido_cantidad').value) || 1;
+            const ancho = parseFloat(document.getElementById('pedido_ancho').value) || null;
+            const alto = parseFloat(document.getElementById('pedido_alto').value) || null;
+
+            const { error: errorDetalle } = await supabaseClient
+                .from('detalles_pedido')
+                .insert({
+                    pedido_id: pedidoId,
+                    producto_id: parseInt(productoId),
+                    cantidad: cantidad,
+                    medida_ancho_cm: ancho,
+                    medida_alto_cm: alto
+                });
+
+            if (errorDetalle) throw errorDetalle;
+
+            ToastSystem.success('✅ Pedido creado', `Pedido #${pedidoId} registrado exitosamente`);
+            const modal = bootstrap.Modal.getInstance(document.getElementById('modalNuevoPedido'));
+            if (modal) modal.hide();
+            document.getElementById('formNuevoPedido').reset();
+            await this.refrescarDatos();
+
+        } catch (error) {
+            console.error('Error guardar pedido:', error);
+            ToastSystem.error('Error', 'No se pudo guardar el pedido');
+        }
+    },
+
+    async abrirModalEditarPedido(id) {
+        try {
+            const { data, error } = await supabaseClient
+                .from('pedidos')
+                .select('*')
+                .eq('id', id)
+                .single();
+
+            if (error) throw error;
+
+            document.getElementById('editar_pedido_id').textContent = id;
+            document.getElementById('editar_pedido_id_hidden').value = id;
+            document.getElementById('editar_pedido_estado').value = data.estado || 'cotizando';
+            document.getElementById('editar_pedido_prioridad').value = data.prioridad || 'normal';
+            document.getElementById('editar_pedido_observaciones').value = data.observaciones || '';
+
+            const modal = new bootstrap.Modal(document.getElementById('modalEditarPedido'));
+            modal.show();
+
+        } catch (error) {
+            console.error('Error cargar pedido:', error);
+            ToastSystem.error('Error', 'No se pudo cargar el pedido');
+        }
+    },
+
+    async guardarEditarPedido() {
+        const id = parseInt(document.getElementById('editar_pedido_id_hidden').value);
+
+        try {
+            const { error } = await supabaseClient
+                .from('pedidos')
+                .update({
+                    estado: document.getElementById('editar_pedido_estado').value,
+                    prioridad: document.getElementById('editar_pedido_prioridad').value,
+                    observaciones: document.getElementById('editar_pedido_observaciones').value.trim() || null,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', id);
+
+            if (error) throw error;
+
+            ToastSystem.success('✅ Pedido actualizado', `Pedido #${id} actualizado correctamente`);
+            const modal = bootstrap.Modal.getInstance(document.getElementById('modalEditarPedido'));
+            if (modal) modal.hide();
+            await this.refrescarDatos();
+
+        } catch (error) {
+            console.error('Error actualizar pedido:', error);
+            ToastSystem.error('Error', 'No se pudo actualizar el pedido');
+        }
+    },
+
+    async completarPedido(id) {
+        if (!confirm(`¿Marcar pedido #${id} como completado?`)) return;
+
+        try {
+            const { error } = await supabaseClient
+                .from('pedidos')
+                .update({ estado: 'entregado', updated_at: new Date().toISOString() })
+                .eq('id', id);
+
+            if (error) throw error;
+
+            ToastSystem.success('✅ Pedido completado', `Pedido #${id} marcado como entregado`);
+            await this.refrescarDatos();
+
+        } catch (error) {
+            console.error('Error completar pedido:', error);
+            ToastSystem.error('Error', 'No se pudo completar el pedido');
+        }
+    },
+
+    async eliminarPedido(id) {
+        if (!confirm(`¿Cancelar pedido #${id}?`)) return;
+
+        try {
+            const { error } = await supabaseClient
+                .from('pedidos')
+                .update({ estado: 'cancelado', updated_at: new Date().toISOString() })
+                .eq('id', id);
+
+            if (error) throw error;
+
+            ToastSystem.success('✅ Pedido cancelado', `Pedido #${id} cancelado`);
+            await this.refrescarDatos();
+
+        } catch (error) {
+            console.error('Error cancelar pedido:', error);
+            ToastSystem.error('Error', 'No se pudo cancelar el pedido');
+        }
+    },
+
+    verPedido(id) {
+        this.verPedidoDetalle(id);
+    },
+
+    // ==========================================
+    // FUNCIONES PARA ABRIR MODALES
+    // ==========================================
+    abrirModalNuevoPedido() {
+        this.cargarClientes();
+        this.cargarProductos();
+        const modal = new bootstrap.Modal(document.getElementById('modalNuevoPedido'));
+        modal.show();
+    },
+
+    abrirModalClientes() {
+        const modal = new bootstrap.Modal(document.getElementById('modalClientes'));
+        modal.show();
+        this.cargarClientes();
+    },
+
+    abrirModalNuevoCliente() {
+        const modal = new bootstrap.Modal(document.getElementById('modalNuevoCliente'));
+        modal.show();
+    },
+
+    abrirModalProductos() {
+        const modal = new bootstrap.Modal(document.getElementById('modalProductos'));
+        modal.show();
+        this.cargarProductos();
+    },
+
+    abrirModalNuevoProducto() {
+        const modal = new bootstrap.Modal(document.getElementById('modalNuevoProducto'));
+        modal.show();
+    },
+
+    mostrarNotificaciones() {
+        const urgentes = parseInt(document.getElementById('kpi-urgentes').textContent) || 0;
+        if (urgentes > 0) {
+            ToastSystem.warning('📢 Notificaciones', `Tienes ${urgentes} pedido(s) urgente(s) pendiente(s)`);
+        } else {
+            ToastSystem.success('✅ Sin notificaciones', 'No hay pedidos urgentes pendientes');
+        }
+    },
+
+    // ==========================================
+    // DESTRUCCIÓN Y LIMPIEZA
+    // ==========================================
+    destroy() {
+        if (STATE.refreshInterval) {
+            clearInterval(STATE.refreshInterval);
+            STATE.refreshInterval = null;
+        }
+        console.log('🧹 Aplicación destruida correctamente');
+    }
+};
+
+// ==========================================
+// EXPOSICIÓN DE FUNCIONES GLOBALES
+// ==========================================
+window.App = App;
+window.abrirModalNuevoPedido = () => App.abrirModalNuevoPedido();
+window.abrirModalClientes = () => App.abrirModalClientes();
+window.abrirModalNuevoCliente = () => App.abrirModalNuevoCliente();
+window.abrirModalProductos = () => App.abrirModalProductos();
+window.abrirModalNuevoProducto = () => App.abrirModalNuevoProducto();
+window.refrescarDatos = () => App.refrescarDatos();
+window.mostrarNotificaciones = () => App.mostrarNotificaciones();
+window.guardarNuevoCliente = () => App.guardarNuevoCliente();
+window.guardarNuevoProducto = () => App.guardarNuevoProducto();
+window.guardarNuevoPedido = () => App.guardarNuevoPedido();
+window.guardarEditarPedido = () => App.guardarEditarPedido();
+window.completarPedido = (id) => App.completarPedido(id);
+window.eliminarPedido = (id) => App.eliminarPedido(id);
+window.verPedido = (id) => App.verPedido(id);
+window.verPedidoDetalle = (id) => App.verPedidoDetalle(id);
+window.eliminarCliente = (id) => App.eliminarCliente(id);
+window.eliminarProducto = (id) => App.eliminarProducto(id);
+window.reintentar = () => App.reintentar();
+window.calcularEficienciaTodos = () => App.calcularEficienciaTodos();
+window.toggleAccordion = (id) => App.toggleAccordion(id);
+window.toggleCalendar = () => App.toggleCalendar();
+window.closeCalendar = () => App.closeCalendar();
+window.calendarNavigate = (delta) => App.calendarNavigate(delta);
+window.calendarGoToday = () => App.calendarGoToday();
+window.selectDate = (year, month, day) => App.selectDate(year, month, day);
+
+// ==========================================
+// INICIALIZACIÓN AUTOMÁTICA
+// ==========================================
+document.addEventListener('DOMContentLoaded', () => {
+    App.init();
+});
+
+// ==========================================
+// LIMPIEZA AL RECARGAR
+// ==========================================
+window.addEventListener('beforeunload', () => {
+    App.destroy();
+});
+
+console.log('✅ Dashboard IVENMEX v3.2.0 cargado correctamente');

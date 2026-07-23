@@ -1,0 +1,301 @@
+## Table `empleados`
+
+Personal de la empresa
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `int8` | Primary |
+| `nombre` | `varchar` |  |
+| `apellido` | `varchar` |  |
+| `cargo` | `varchar` |  |
+| `email` | `varchar` |  Nullable Unique |
+| `telefono` | `varchar` |  Nullable |
+| `activo` | `bool` |  Nullable |
+| `created_at` | `timestamptz` |  Nullable |
+| `departamento_id` | `int8` |  Nullable |
+
+## Table `clientes`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `int8` | Primary |
+| `nombre` | `varchar` |  |
+| `telefono` | `varchar` |  Nullable |
+| `email` | `varchar` |  Nullable |
+| `direccion` | `text` |  Nullable |
+| `created_at` | `timestamptz` |  Nullable |
+
+## Table `productos`
+
+Catálogo de productos y servicios
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `int8` | Primary |
+| `nombre` | `varchar` |  |
+| `categoria` | `varchar` |  |
+| `material` | `varchar` |  Nullable |
+| `tipo_producto` | `varchar` |  |
+| `tipo_precio` | `varchar` |  Nullable |
+| `precio_por_m2` | `numeric` |  Nullable |
+| `precio_unitario` | `numeric` |  Nullable |
+| `velocidad_impresion_m2_hora` | `numeric` |  Nullable |
+| `tiempo_manipulacion_minutos` | `int4` |  Nullable |
+| `activo` | `bool` |  Nullable |
+| `created_at` | `timestamptz` |  Nullable |
+
+## Table `pedidos`
+
+Órdenes de trabajo de clientes
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `int8` | Primary |
+| `cliente_id` | `int8` |  Nullable |
+| `fecha_solicitud` | `timestamptz` |  Nullable |
+| `fecha_entrega_prometida` | `date` |  Nullable |
+| `hora_limite_sametime` | `time` |  Nullable |
+| `estado` | `varchar` |  Nullable |
+| `total` | `numeric` |  Nullable |
+| `anticipo` | `numeric` |  Nullable |
+| `metodo_pago` | `varchar` |  Nullable |
+| `observaciones` | `text` |  Nullable |
+| `created_at` | `timestamptz` |  Nullable |
+| `updated_at` | `timestamptz` |  Nullable |
+| `prioridad` | `varchar` |  Nullable |
+| `tipo_entrega` | `varchar` |  Nullable |
+| `direccion_entrega` | `text` |  Nullable |
+| `empleado_creador_id` | `int8` |  Nullable |
+
+## Table `detalles_pedido`
+
+Productos específicos de cada pedido
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `int8` | Primary |
+| `pedido_id` | `int8` |  |
+| `producto_id` | `int8` |  Nullable |
+| `cantidad` | `int4` |  |
+| `medida_ancho_cm` | `numeric` |  Nullable |
+| `medida_alto_cm` | `numeric` |  Nullable |
+| `material_especifico` | `varchar` |  Nullable |
+| `archivo_digital_nombre` | `varchar` |  Nullable |
+| `precio_unitario` | `numeric` |  Nullable |
+| `subtotal` | `numeric` |  Nullable |
+| `tiempo_estimado_minutos` | `int4` |  Nullable |
+| `tiempo_real_minutos` | `int4` |  Nullable |
+| `observaciones` | `text` |  Nullable |
+| `created_at` | `timestamptz` |  Nullable |
+| `costo_materiales` | `numeric` |  Nullable |
+| `margen_ganancia` | `numeric` |  Nullable |
+
+## Table `tareas`
+
+Asignaciones de trabajo a empleados
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `int8` | Primary |
+| `pedido_id` | `int8` |  |
+| `detalle_pedido_id` | `int8` |  Nullable |
+| `empleado_id` | `int8` |  Nullable |
+| `tipo_tarea` | `varchar` |  |
+| `fecha_asignacion` | `timestamptz` |  Nullable |
+| `fecha_inicio` | `timestamptz` |  Nullable |
+| `fecha_fin` | `timestamptz` |  Nullable |
+| `estado` | `varchar` |  Nullable |
+| `tiempo_estimado_minutos` | `int4` |  Nullable |
+| `tiempo_real_minutos` | `int4` |  Nullable |
+| `observaciones` | `text` |  Nullable |
+| `created_at` | `timestamptz` |  Nullable |
+| `maquina_id` | `int8` |  Nullable |
+| `fecha_inicio_real` | `timestamptz` |  Nullable |
+| `fecha_fin_real` | `timestamptz` |  Nullable |
+| `completada` | `bool` |  Nullable |
+| `calificacion` | `int4` |  Nullable |
+
+## Table `historial_estados`
+
+Auditoría de cambios de estado en pedidos
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `int8` | Primary |
+| `pedido_id` | `int8` |  |
+| `estado_anterior` | `varchar` |  Nullable |
+| `estado_nuevo` | `varchar` |  |
+| `empleado_id` | `int8` |  Nullable |
+| `fecha_cambio` | `timestamptz` |  Nullable |
+| `observaciones` | `text` |  Nullable |
+
+## Table `conversaciones`
+
+Historial de conversaciones del chat bot
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `int8` | Primary |
+| `pedido_id` | `int8` |  Nullable |
+| `usuario` | `varchar` |  Nullable |
+| `mensaje` | `text` |  |
+| `respuesta_bot` | `text` |  Nullable |
+| `fecha` | `timestamptz` |  Nullable |
+
+## Table `departamentos`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `int8` | Primary |
+| `nombre` | `varchar` |  Unique |
+| `descripcion` | `text` |  Nullable |
+| `created_at` | `timestamptz` |  Nullable |
+
+## Table `maquinas`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `int8` | Primary |
+| `nombre` | `varchar` |  |
+| `tipo` | `varchar` |  |
+| `departamento_id` | `int8` |  Nullable |
+| `velocidad_m2_hora` | `numeric` |  Nullable |
+| `activo` | `bool` |  Nullable |
+| `created_at` | `timestamptz` |  Nullable |
+
+## Table `inventario_materiales`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `int8` | Primary |
+| `nombre` | `varchar` |  |
+| `tipo` | `varchar` |  Nullable |
+| `unidad_medida` | `varchar` |  Nullable |
+| `stock_actual` | `numeric` |  Nullable |
+| `stock_minimo` | `numeric` |  Nullable |
+| `costo_unitario` | `numeric` |  Nullable |
+| `proveedor` | `varchar` |  Nullable |
+| `created_at` | `timestamptz` |  Nullable |
+
+## Table `cliente_contactos`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `int8` | Primary |
+| `cliente_id` | `int8` |  Nullable |
+| `telefono` | `varchar` |  |
+| `tipo` | `varchar` |  Nullable |
+| `nombre_contacto` | `varchar` |  Nullable |
+| `created_at` | `timestamptz` |  Nullable |
+
+## Table `pagos`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `int8` | Primary |
+| `pedido_id` | `int8` |  Nullable |
+| `monto` | `numeric` |  |
+| `metodo_pago` | `varchar` |  |
+| `fecha_pago` | `timestamptz` |  Nullable |
+| `referencia` | `varchar` |  Nullable |
+| `observaciones` | `text` |  Nullable |
+
+## Table `detalles_pedido_materiales`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `int8` | Primary |
+| `detalle_pedido_id` | `int8` |  Nullable |
+| `material_id` | `int8` |  Nullable |
+| `cantidad_usada` | `numeric` |  |
+| `created_at` | `timestamptz` |  Nullable |
+
+## Table `eficiencia_empleados`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `int8` | Primary |
+| `empleado_id` | `int8` |  Nullable |
+| `fecha` | `date` |  Nullable |
+| `tareas_completadas` | `int4` |  Nullable |
+| `tareas_pendientes` | `int4` |  Nullable |
+| `tareas_retrasadas` | `int4` |  Nullable |
+| `tiempo_promedio_real` | `int4` |  Nullable |
+| `tiempo_promedio_estimado` | `int4` |  Nullable |
+| `tasa_exito` | `numeric` |  Nullable |
+| `created_at` | `timestamptz` |  Nullable |
+
+## RLS Policies
+
+### `detalles_pedido`
+
+| Policy | Command | Roles | Action | USING | WITH CHECK |
+|--------|---------|-------|--------|-------|------------|
+| `Permitir todo a detalles_pedido` | ALL | public | PERMISSIVE | `true` | `true` |
+
+### `tareas`
+
+| Policy | Command | Roles | Action | USING | WITH CHECK |
+|--------|---------|-------|--------|-------|------------|
+| `Permitir todo a tareas` | ALL | public | PERMISSIVE | `true` | `true` |
+
+### `pedidos`
+
+| Policy | Command | Roles | Action | USING | WITH CHECK |
+|--------|---------|-------|--------|-------|------------|
+| `Permitir todo a pedidos` | ALL | public | PERMISSIVE | `true` | `true` |
+
+### `clientes`
+
+| Policy | Command | Roles | Action | USING | WITH CHECK |
+|--------|---------|-------|--------|-------|------------|
+| `Permitir todo a clientes` | ALL | public | PERMISSIVE | `true` | `true` |
+
+### `productos`
+
+| Policy | Command | Roles | Action | USING | WITH CHECK |
+|--------|---------|-------|--------|-------|------------|
+| `Permitir todo a productos` | ALL | public | PERMISSIVE | `true` | `true` |
+
+### `empleados`
+
+| Policy | Command | Roles | Action | USING | WITH CHECK |
+|--------|---------|-------|--------|-------|------------|
+| `Permitir todo a empleados` | ALL | public | PERMISSIVE | `true` | `true` |
+
+### `departamentos`
+
+| Policy | Command | Roles | Action | USING | WITH CHECK |
+|--------|---------|-------|--------|-------|------------|
+| `Permitir todo a departamentos` | ALL | public | PERMISSIVE | `true` | `true` |
+
