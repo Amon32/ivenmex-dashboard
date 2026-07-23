@@ -281,8 +281,33 @@
             </div>
         </div>
 
+        <!-- ==========================================
+        CONTROLES DE TELEGRAM
+        ========================================== -->
+        <div class="telegram-controls">
+            <span class="controls-title">
+                <i class="fab fa-telegram-plane"></i> Control desde Telegram
+            </span>
+            
+            <button class="md-btn md-btn-secondary" onclick="App.enviarComandoTelegram('/estado');">
+                <i class="fas fa-chart-bar"></i> Enviar Estado
+            </button>
+            
+            <button class="md-btn md-btn-primary" onclick="App.enviarComandoTelegram('/pedidos');">
+                <i class="fas fa-clipboard-list"></i> Enviar Pedidos
+            </button>
+            
+            <button class="md-btn md-btn-outline" onclick="App.obtenerDatosTelegram();">
+                <i class="fas fa-sync"></i> Sincronizar
+            </button>
+            
+            <button class="md-btn md-btn-outline" onclick="window.open('https://t.me/invemex_bot', '_blank');">
+                <i class="fab fa-telegram"></i> Abrir Telegram
+            </button>
+        </div>
+
         <!-- BOTONES RÁPIDOS FLOATING -->
-        <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center; margin-top:24px;">
+        <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center; margin-top:16px;">
             <!-- Nuevo Pedido - Azul Metálico -->
             <button class="md-btn md-btn-primary" onclick="App.abrirModalNuevoPedido();">
                 <i class="fas fa-plus"></i> Nuevo Pedido
