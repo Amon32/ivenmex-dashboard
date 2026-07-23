@@ -584,7 +584,6 @@ body {
     border-bottom: none;
 }
 
-/* Filas clickeables */
 .md-table tbody tr.clickable-row {
     cursor: pointer;
 }
@@ -1184,6 +1183,30 @@ body {
 }
 
 /* ==========================================
+   BOTONES DE TELEGRAM
+========================================== */
+.telegram-controls {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 16px;
+    padding: 16px;
+    background: var(--md-gray);
+    border-radius: var(--md-radius-medium);
+    border: 1px solid var(--md-gray-dark);
+}
+
+.telegram-controls .controls-title {
+    font-weight: 700;
+    color: var(--md-primary);
+    width: 100%;
+    text-align: center;
+    margin-bottom: 4px;
+    font-size: 14px;
+}
+
+/* ==========================================
    MD3 - RESPONSIVE
 ========================================== */
 @media (max-width: 1024px) {
@@ -1238,6 +1261,14 @@ body {
     .detail-card .detail-value {
         font-size: 13px;
     }
+    .telegram-controls {
+        padding: 12px;
+        gap: 8px;
+    }
+    .telegram-controls .md-btn {
+        font-size: 12px;
+        padding: 6px 12px;
+    }
 }
 
 @media (max-width: 480px) {
@@ -1269,5 +1300,9 @@ body {
     }
     .detail-card .detail-value {
         font-size: 12px;
+    }
+    .telegram-controls .md-btn {
+        font-size: 11px;
+        padding: 4px 10px;
     }
 }
