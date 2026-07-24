@@ -771,27 +771,6 @@ body {
 .bar-item .fa-hotjar { color: #8E44AD; }
 .bar-item .fa-user-tie { color: #E74C8B; }
 
-/* TELEGRAM CONTROLS */
-.telegram-controls {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-    justify-content: center;
-    margin-top: 16px;
-    padding: 16px;
-    background: var(--md-gray);
-    border-radius: var(--md-radius-medium);
-    border: 1px solid var(--md-gray-dark);
-}
-.telegram-controls .controls-title {
-    font-weight: 700;
-    color: var(--md-primary);
-    width: 100%;
-    text-align: center;
-    margin-bottom: 4px;
-    font-size: 14px;
-}
-
 /* RESPONSIVE */
 @media (max-width: 1024px) { .md-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 768px) {
@@ -807,8 +786,6 @@ body {
     .md-calendar-dropdown { min-width: 280px; right: -80px; transform-origin: top center; }
     .md-calendar-grid .day { font-size: 13px; padding: 4px; }
     .detail-card .detail-value { font-size: 13px; }
-    .telegram-controls { padding: 12px; gap: 8px; }
-    .telegram-controls .md-btn { font-size: 12px; padding: 6px 12px; }
 }
 @media (max-width: 480px) {
     .md-toolbar-brand .brand-text { font-size: 18px; }
@@ -819,5 +796,4 @@ body {
     .md-btn-primary, .md-btn-secondary, .md-btn-outline { font-size: 12px; padding: 6px 14px; }
     .detail-card { padding: var(--md-spacing-3); }
     .detail-card .detail-value { font-size: 12px; }
-    .telegram-controls .md-btn { font-size: 11px; padding: 4px 10px; }
 }
