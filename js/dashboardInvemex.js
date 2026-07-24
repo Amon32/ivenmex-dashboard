@@ -1,7 +1,7 @@
 /**
  * ==========================================
  * DASHBOARD INVEMEX - SISTEMA DE GESTIÓN
- * Versión: 5.0.0 - Con Gestión de Empleados
+ * Versión: 5.1.0 - Con Avatares de Empleados
  * ==========================================
  */
 
@@ -12,7 +12,7 @@ const CONFIG = {
     TOAST_DURATION: 4000
 };
 
-console.log('🚀 Iniciando Dashboard INVEMEX v5.0.0');
+console.log('🚀 Iniciando Dashboard INVEMEX v5.1.0');
 
 const supabaseClient = supabase.createClient(
     CONFIG.SUPABASE_URL,
@@ -169,7 +169,7 @@ const App = {
     // INICIALIZACIÓN
     // ==========================================
     async init() {
-        console.log('📋 Inicializando aplicación v5.0.0...');
+        console.log('📋 Inicializando aplicación v5.1.0...');
         const today = new Date();
         this.calendarState.selectedDate = new Date(today);
         this.calendarState.currentDate = new Date(today);
@@ -302,7 +302,7 @@ const App = {
                 this.cargarCargaTrabajo(),
                 this.cargarPedidosUrgentes(),
                 this.cargarEficiencia(),
-                this.cargarEmpleadosYTareas()  // ← Nueva función
+                this.cargarEmpleadosYTareas()
             ]);
             console.log('✅ Todos los datos cargados correctamente');
             TableCounter.update();
@@ -536,7 +536,7 @@ const App = {
     },
 
     // ==========================================
-    // SISTEMA DE EMPLEADOS - PESTAÑAS Y TAREAS
+    // SISTEMA DE EMPLEADOS - PANEL DE AVATARES
     // ==========================================
     
     // Colores para avatares de empleados
@@ -555,12 +555,11 @@ const App = {
         return this.empleadoColores[index];
     },
 
-    // Cargar todos los empleados y sus tareas
+    // Cargar empleados y mostrar en el panel de avatares
     async cargarEmpleadosYTareas() {
-        console.log('📊 Cargando empleados y tareas...');
+        console.log('📊 Cargando empleados...');
         
         try {
-            // 1. Obtener empleados activos
             const { data: empleados, error: errorEmpleados } = await supabaseClient
                 .from('empleados')
                 .select('*')
@@ -572,16 +571,80 @@ const App = {
             STATE.empleados = empleados || [];
 
             if (!empleados || empleados.length === 0) {
-                document.getElementById('empleados-loading').innerHTML = `
-                    <div style="text-align:center; padding:40px; color: var(--md-text-secondary);">
-                        <i class="fas fa-users" style="font-size:32px; display:block; margin-bottom:12px; opacity:0.15;"></i>
+                document.getElementById('empleadosAvatarGrid').innerHTML = `
+                    <div style="text-align:center; padding:20px; width:100%; color: var(--md-text-secondary);">
+                        <i class="fas fa-users" style="font-size:28px; display:block; margin-bottom:8px; opacity:0.15;"></i>
                         No hay empleados registrados
                     </div>
                 `;
+                document.getElementById('empleados-total-badge').textContent = '0';
                 return;
             }
 
-            // 2. Obtener tareas de todos los empleados
+            // Obtener tareas pendientes de todos los empleados
+            const { data: tareas, error: errorTareas } = await supabaseClient
+                .from('tareas')
+                .select('*')
+                .in('estado', ['pendiente', 'en_progreso', 'notificado'])
+                .order('fecha_asignacion', { ascending: false });
+
+            if (errorTareas) throw errorTareas;
+
+            STATE.tareas = tareas || [];
+
+            this.renderAvataresEmpleados(empleados, tareas || []);
+
+        } catch (error) {
+            console.error('❌ Error cargando empleados:', error);
+            document.getElementById('empleadosAvatarGrid').innerHTML = `
+                <div style="text-align:center; padding:20px; width:100%; color: #EF4444;">
+                    <i class="fas fa-exclamation-circle" style="font-size:28px; display:block; margin-bottom:8px;"></i>
+                    Error al cargar empleados: ${error.message}
+                </div>
+            `;
+            ToastSystem.error('Error', 'No se pudieron cargar los empleados');
+        }
+    },
+
+    // Renderizar avatares en el panel
+    renderAvataresEmpleados(empleados, tareas) {
+        const grid = document.getElementById('empleadosAvatarGrid');
+        
+        let html = '';
+        
+        empleados.forEach(empleado => {
+            const tareasPendientes = tareas.filter(t => t.empleado_id === empleado.id).length;
+            const color = this.getColorEmpleado(empleado.nombre);
+            const iniciales = `${empleado.nombre.charAt(0)}${empleado.apellido ? empleado.apellido.charAt(0) : ''}`;
+            
+            const badgeClass = tareasPendientes > 0 ? 'pendiente' : 'listo';
+            
+            html += `
+                <div class="empleado-avatar-card" onclick="App.abrirModalEmpleado(${empleado.id})" title="Ver tareas de ${empleado.nombre}">
+                    <span class="avatar-badge ${badgeClass}">${tareasPendientes}</span>
+                    <div class="avatar-circle" style="background:${color};">${iniciales}</div>
+                    <span class="avatar-name">${empleado.nombre}</span>
+                </div>
+            `;
+        });
+        
+        grid.innerHTML = html;
+        document.getElementById('empleados-total-badge').textContent = empleados.length;
+    },
+
+    // Abrir modal con la vista detallada del empleado
+    async abrirModalEmpleado(empleadoId) {
+        try {
+            console.log(`📋 Abriendo vista de empleado ${empleadoId}`);
+            
+            const { data: empleado, error: errorEmpleado } = await supabaseClient
+                .from('empleados')
+                .select('*')
+                .eq('id', empleadoId)
+                .single();
+            
+            if (errorEmpleado) throw errorEmpleado;
+            
             const { data: tareas, error: errorTareas } = await supabaseClient
                 .from('tareas')
                 .select(`
@@ -595,116 +658,81 @@ const App = {
                         clientes (nombre)
                     )
                 `)
+                .eq('empleado_id', empleadoId)
                 .order('fecha_asignacion', { ascending: false });
-
+            
             if (errorTareas) throw errorTareas;
-
-            STATE.tareas = tareas || [];
-
-            // 3. Generar pestañas y contenido
-            this.renderEmpleadosTabs(empleados, tareas || []);
-
+            
+            this.renderModalEmpleado(empleado, tareas || []);
+            
+            const modal = new bootstrap.Modal(document.getElementById('modalEmpleadoDetalle'));
+            modal.show();
+            
         } catch (error) {
-            console.error('❌ Error cargando empleados:', error);
-            document.getElementById('empleados-loading').innerHTML = `
-                <div style="text-align:center; padding:40px; color: #EF4444;">
-                    <i class="fas fa-exclamation-circle" style="font-size:32px; display:block; margin-bottom:12px;"></i>
-                    Error al cargar empleados: ${error.message}
-                </div>
-            `;
-            ToastSystem.error('Error', 'No se pudieron cargar los empleados');
+            console.error('❌ Error cargando empleado:', error);
+            ToastSystem.error('Error', 'No se pudo cargar la información del empleado');
         }
     },
 
-    // Renderizar pestañas de empleados
-    renderEmpleadosTabs(empleados, tareas) {
-        const tabsContainer = document.getElementById('empleadosTabs');
-        const contentContainer = document.getElementById('empleadosTabContent');
+    // Renderizar contenido del modal
+    renderModalEmpleado(empleado, tareas) {
+        const color = this.getColorEmpleado(empleado.nombre);
+        const iniciales = `${empleado.nombre.charAt(0)}${empleado.apellido ? empleado.apellido.charAt(0) : ''}`;
         
-        let tabsHtml = '';
-        let contentHtml = '';
+        const completadas = tareas.filter(t => t.estado === 'completado' || t.completada === true).length;
+        const enProceso = tareas.filter(t => t.estado === 'en_progreso').length;
+        const pendientes = tareas.filter(t => t.estado === 'pendiente').length;
+        const total = tareas.length;
         
-        empleados.forEach((empleado, index) => {
-            const isActive = index === 0 ? 'active' : '';
-            const tabId = `tab-empleado-${empleado.id}`;
-            const contentId = `content-empleado-${empleado.id}`;
+        document.getElementById('modalEmpleadoTitle').innerHTML = `
+            <span class="avatar-lg" style="background:${color};">${iniciales}</span>
+            ${empleado.nombre} ${empleado.apellido || ''}
+            <span class="ms-2 md-badge primary" style="font-size:12px;">${total} tareas</span>
+        `;
+        
+        document.getElementById('modalEmpleadoBody').innerHTML = `
+            <div class="profile-summary">
+                <div class="info-item"><span class="label">📋 Cargo:</span> ${empleado.cargo || 'Sin cargo'}</div>
+                ${empleado.email ? `<div class="info-item"><span class="label">📧 Email:</span> ${empleado.email}</div>` : ''}
+                ${empleado.telefono ? `<div class="info-item"><span class="label">📱 Teléfono:</span> ${empleado.telefono}</div>` : ''}
+                <div class="info-item"><span class="label">📊 Total tareas:</span> ${total}</div>
+            </div>
             
-            // Obtener tareas del empleado
-            const tareasEmpleado = tareas.filter(t => t.empleado_id === empleado.id);
-            const pendientes = tareasEmpleado.filter(t => t.estado === 'pendiente').length;
-            const enProceso = tareasEmpleado.filter(t => t.estado === 'en_progreso').length;
-            const completadas = tareasEmpleado.filter(t => t.estado === 'completado').length;
+            <div class="stats-row">
+                <span class="stat completadas">✅ ${completadas} completadas</span>
+                <span class="stat proceso">⏳ ${enProceso} en proceso</span>
+                <span class="stat pendientes">📋 ${pendientes} pendientes</span>
+            </div>
             
-            const color = this.getColorEmpleado(empleado.nombre);
-            const iniciales = `${empleado.nombre.charAt(0)}${empleado.apellido ? empleado.apellido.charAt(0) : ''}`;
-            
-            // Pestaña
-            tabsHtml += `
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link ${isActive}" id="${tabId}" data-bs-toggle="tab" 
-                            data-bs-target="#${contentId}" type="button" role="tab">
-                        <span class="tab-avatar" style="background:${color};">${iniciales}</span>
-                        ${empleado.nombre}
-                        <span class="tab-badge">${pendientes + enProceso}</span>
-                    </button>
-                </li>
-            `;
-            
-            // Contenido
-            contentHtml += `
-                <div class="tab-pane fade ${isActive} show" id="${contentId}" role="tabpanel">
-                    <!-- Perfil del empleado -->
-                    <div class="empleado-profile">
-                        <div class="profile-avatar" style="background:${color};">${iniciales}</div>
-                        <div class="profile-info">
-                            <div class="info-item"><span class="label">👤 Nombre:</span> ${empleado.nombre} ${empleado.apellido || ''}</div>
-                            <div class="info-item"><span class="label">📋 Cargo:</span> ${empleado.cargo || 'Sin cargo'}</div>
-                            ${empleado.email ? `<div class="info-item"><span class="label">📧 Email:</span> ${empleado.email}</div>` : ''}
-                            ${empleado.telefono ? `<div class="info-item"><span class="label">📱 Teléfono:</span> ${empleado.telefono}</div>` : ''}
-                        </div>
-                        <div style="display:flex; gap:12px; flex-wrap:wrap;">
-                            <span class="md-badge success" style="background:#DCFCE7; color:#166534;">✅ ${completadas} completadas</span>
-                            <span class="md-badge warning" style="background:#FEF3C7; color:#92400E;">⏳ ${enProceso} en proceso</span>
-                            <span class="md-badge danger" style="background:#FEE2E2; color:#991B1B;">📋 ${pendientes} pendientes</span>
-                        </div>
-                    </div>
-                    
-                    <!-- Tabla de tareas -->
-                    <div style="overflow-x:auto;">
-                        <table class="tareas-empleado-table">
-                            <thead>
-                                <tr>
-                                    <th style="min-width:80px;">Recepción</th>
-                                    <th style="min-width:120px;">Responsable</th>
-                                    <th style="min-width:150px;">Tarea</th>
-                                    <th style="min-width:100px;">Entrega</th>
-                                    <th style="min-width:150px;">Detalles</th>
-                                    <th style="min-width:130px;">Status</th>
-                                    <th style="min-width:130px;">Finalización</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tbody-empleado-${empleado.id}">
-                                ${this.renderTareasEmpleado(tareasEmpleado, empleado)}
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    ${tareasEmpleado.length === 0 ? `
-                        <div style="text-align:center; padding:30px; color: var(--md-text-secondary);">
-                            <i class="fas fa-inbox" style="font-size:28px; display:block; margin-bottom:8px; opacity:0.15;"></i>
-                            No hay tareas asignadas a este empleado
-                        </div>
-                    ` : ''}
+            ${tareas.length > 0 ? `
+                <div class="table-wrapper">
+                    <table class="tareas-empleado-modal">
+                        <thead>
+                            <tr>
+                                <th style="min-width:80px;">Recepción</th>
+                                <th style="min-width:120px;">Tarea</th>
+                                <th style="min-width:100px;">Entrega</th>
+                                <th style="min-width:150px;">Detalles</th>
+                                <th style="min-width:130px;">Status</th>
+                                <th style="min-width:110px;">Finalización</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${this.renderTareasModal(tareas, empleado)}
+                        </tbody>
+                    </table>
                 </div>
-            `;
-        });
-        
-        tabsContainer.innerHTML = tabsHtml;
-        contentContainer.innerHTML = contentHtml;
+            ` : `
+                <div class="empty-tareas">
+                    <i class="fas fa-inbox"></i>
+                    No hay tareas asignadas a este empleado
+                </div>
+            `}
+        `;
     },
 
-    // Renderizar tareas de un empleado
-    renderTareasEmpleado(tareas, empleado) {
+    // Renderizar tareas en el modal
+    renderTareasModal(tareas, empleado) {
         if (!tareas || tareas.length === 0) return '';
         
         const statusMap = {
@@ -723,14 +751,12 @@ const App = {
             const fechaEntrega = pedido.fecha_entrega_prometida ? new Date(pedido.fecha_entrega_prometida).toLocaleDateString('es-ES') : '-';
             const fechaFin = tarea.fecha_fin ? new Date(tarea.fecha_fin).toLocaleDateString('es-ES') : '-';
             
-            const responsable = empleado.nombre;
             const tareaNombre = tarea.tipo_tarea || 'Sin tarea';
             const detalles = pedido.observaciones || tarea.observaciones || cliente.nombre || 'Sin detalles';
             
             return `
                 <tr data-tarea-id="${tarea.id}">
                     <td>${fechaRecepcion}</td>
-                    <td>${responsable}</td>
                     <td><strong>${tareaNombre}</strong></td>
                     <td>${fechaEntrega}</td>
                     <td style="max-width:150px; word-wrap:break-word;">${detalles}</td>
@@ -754,7 +780,7 @@ const App = {
         }).join('');
     },
 
-    // Actualizar status de una tarea
+    // Actualizar status de una tarea (desde el modal)
     async actualizarStatusTarea(tareaId, nuevoStatus, empleadoId) {
         try {
             console.log(`🔄 Actualizando tarea ${tareaId} a ${nuevoStatus}`);
@@ -764,7 +790,6 @@ const App = {
                 updated_at: new Date().toISOString()
             };
             
-            // Si se marca como completado, registrar fecha de finalización
             if (nuevoStatus === 'completado') {
                 updateData.fecha_fin = new Date().toISOString();
                 updateData.completada = true;
@@ -777,31 +802,17 @@ const App = {
             
             if (error) throw error;
             
-            // Actualizar también el estado en el pedido si está relacionado
-            const { data: tarea } = await supabaseClient
-                .from('tareas')
-                .select('pedido_id')
-                .eq('id', tareaId)
-                .single();
-            
-            if (tarea && tarea.pedido_id) {
-                await supabaseClient
-                    .from('pedidos')
-                    .update({
-                        estado: nuevoStatus === 'completado' ? 'entregado' : 'en_produccion',
-                        updated_at: new Date().toISOString()
-                    })
-                    .eq('id', tarea.pedido_id);
-            }
-            
-            // Actualizar eficiencia del empleado
+            // Actualizar eficiencia
             await this.calcularEficienciaEmpleado(empleadoId);
             
-            ToastSystem.success('✅ Actualizado', `Tarea #${tareaId} cambiada a ${nuevoStatus}`);
+            ToastSystem.success('✅ Actualizado', `Tarea cambiada a ${nuevoStatus}`);
             
-            // Recargar datos del dashboard y empleados
-            await this.refrescarDatos();
+            // Recargar datos
             await this.cargarEmpleadosYTareas();
+            await this.cargarEficiencia();
+            
+            // Reabrir modal del empleado
+            await this.abrirModalEmpleado(empleadoId);
             
         } catch (error) {
             console.error('❌ Error actualizando tarea:', error);
@@ -820,7 +831,7 @@ const App = {
             if (error) throw error;
             
             const total = tareas.length;
-            const completadas = tareas.filter(t => t.estado === 'completado').length;
+            const completadas = tareas.filter(t => t.estado === 'completado' || t.completada === true).length;
             const pendientes = tareas.filter(t => t.estado === 'pendiente').length;
             const enProgreso = tareas.filter(t => t.estado === 'en_progreso').length;
             
@@ -1300,10 +1311,14 @@ window.calendarNavigate = (delta) => App.calendarNavigate(delta);
 window.calendarGoToday = () => App.calendarGoToday();
 window.selectDate = (year, month, day) => App.selectDate(year, month, day);
 window.suscribirRealtime = () => App.suscribirRealtime();
+window.cargarEmpleadosYTareas = () => App.cargarEmpleadosYTareas();
+window.abrirModalEmpleado = (id) => App.abrirModalEmpleado(id);
+window.calcularEficienciaEmpleado = (id) => App.calcularEficienciaEmpleado(id);
+window.actualizarStatusTarea = (tareaId, nuevoStatus, empleadoId) => App.actualizarStatusTarea(tareaId, nuevoStatus, empleadoId);
 
 // ==========================================
 // INICIALIZACIÓN
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => { App.init(); });
 window.addEventListener('beforeunload', () => { App.destroy(); });
-console.log('✅ Dashboard INVEMEX v5.0.0 cargado correctamente');
+console.log('✅ Dashboard INVEMEX v5.1.0 cargado correctamente');
