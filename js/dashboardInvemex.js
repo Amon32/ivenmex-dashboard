@@ -1,7 +1,7 @@
 /**
  * ==========================================
  * DASHBOARD INVEMEX - SISTEMA DE GESTIÓN
- * Versión: 4.0.0
+ * Versión: 5.0.0 - Con Gestión de Empleados
  * ==========================================
  */
 
@@ -12,7 +12,7 @@ const CONFIG = {
     TOAST_DURATION: 4000
 };
 
-console.log('🚀 Iniciando Dashboard INVEMEX v4.0.0');
+console.log('🚀 Iniciando Dashboard INVEMEX v5.0.0');
 
 const supabaseClient = supabase.createClient(
     CONFIG.SUPABASE_URL,
@@ -24,6 +24,8 @@ const STATE = {
     productos: [],
     pedidos: [],
     urgentes: [],
+    empleados: [],
+    tareas: [],
     loading: false,
     refreshInterval: null,
     realtimeChannel: null
@@ -167,7 +169,7 @@ const App = {
     // INICIALIZACIÓN
     // ==========================================
     async init() {
-        console.log('📋 Inicializando aplicación v4.0.0...');
+        console.log('📋 Inicializando aplicación v5.0.0...');
         const today = new Date();
         this.calendarState.selectedDate = new Date(today);
         this.calendarState.currentDate = new Date(today);
@@ -299,7 +301,8 @@ const App = {
                 this.cargarEstadosGrafico(),
                 this.cargarCargaTrabajo(),
                 this.cargarPedidosUrgentes(),
-                this.cargarEficiencia()
+                this.cargarEficiencia(),
+                this.cargarEmpleadosYTareas()  // ← Nueva función
             ]);
             console.log('✅ Todos los datos cargados correctamente');
             TableCounter.update();
@@ -533,7 +536,314 @@ const App = {
     },
 
     // ==========================================
-    // SUPABASE REALTIME - ACTUALIZACIONES EN VIVO
+    // SISTEMA DE EMPLEADOS - PESTAÑAS Y TAREAS
+    // ==========================================
+    
+    // Colores para avatares de empleados
+    empleadoColores: [
+        '#0B218B', '#E84C3D', '#27AE60', '#F39C12', 
+        '#8E44AD', '#E74C8B', '#1A3BA8', '#2ECC71'
+    ],
+
+    // Obtener color para un empleado basado en su nombre
+    getColorEmpleado(nombre) {
+        let hash = 0;
+        for (let i = 0; i < nombre.length; i++) {
+            hash = nombre.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const index = Math.abs(hash) % this.empleadoColores.length;
+        return this.empleadoColores[index];
+    },
+
+    // Cargar todos los empleados y sus tareas
+    async cargarEmpleadosYTareas() {
+        console.log('📊 Cargando empleados y tareas...');
+        
+        try {
+            // 1. Obtener empleados activos
+            const { data: empleados, error: errorEmpleados } = await supabaseClient
+                .from('empleados')
+                .select('*')
+                .eq('activo', true)
+                .order('nombre');
+
+            if (errorEmpleados) throw errorEmpleados;
+
+            STATE.empleados = empleados || [];
+
+            if (!empleados || empleados.length === 0) {
+                document.getElementById('empleados-loading').innerHTML = `
+                    <div style="text-align:center; padding:40px; color: var(--md-text-secondary);">
+                        <i class="fas fa-users" style="font-size:32px; display:block; margin-bottom:12px; opacity:0.15;"></i>
+                        No hay empleados registrados
+                    </div>
+                `;
+                return;
+            }
+
+            // 2. Obtener tareas de todos los empleados
+            const { data: tareas, error: errorTareas } = await supabaseClient
+                .from('tareas')
+                .select(`
+                    *,
+                    pedidos (
+                        id,
+                        cliente_id,
+                        fecha_solicitud,
+                        fecha_entrega_prometida,
+                        observaciones,
+                        clientes (nombre)
+                    )
+                `)
+                .order('fecha_asignacion', { ascending: false });
+
+            if (errorTareas) throw errorTareas;
+
+            STATE.tareas = tareas || [];
+
+            // 3. Generar pestañas y contenido
+            this.renderEmpleadosTabs(empleados, tareas || []);
+
+        } catch (error) {
+            console.error('❌ Error cargando empleados:', error);
+            document.getElementById('empleados-loading').innerHTML = `
+                <div style="text-align:center; padding:40px; color: #EF4444;">
+                    <i class="fas fa-exclamation-circle" style="font-size:32px; display:block; margin-bottom:12px;"></i>
+                    Error al cargar empleados: ${error.message}
+                </div>
+            `;
+            ToastSystem.error('Error', 'No se pudieron cargar los empleados');
+        }
+    },
+
+    // Renderizar pestañas de empleados
+    renderEmpleadosTabs(empleados, tareas) {
+        const tabsContainer = document.getElementById('empleadosTabs');
+        const contentContainer = document.getElementById('empleadosTabContent');
+        
+        let tabsHtml = '';
+        let contentHtml = '';
+        
+        empleados.forEach((empleado, index) => {
+            const isActive = index === 0 ? 'active' : '';
+            const tabId = `tab-empleado-${empleado.id}`;
+            const contentId = `content-empleado-${empleado.id}`;
+            
+            // Obtener tareas del empleado
+            const tareasEmpleado = tareas.filter(t => t.empleado_id === empleado.id);
+            const pendientes = tareasEmpleado.filter(t => t.estado === 'pendiente').length;
+            const enProceso = tareasEmpleado.filter(t => t.estado === 'en_progreso').length;
+            const completadas = tareasEmpleado.filter(t => t.estado === 'completado').length;
+            
+            const color = this.getColorEmpleado(empleado.nombre);
+            const iniciales = `${empleado.nombre.charAt(0)}${empleado.apellido ? empleado.apellido.charAt(0) : ''}`;
+            
+            // Pestaña
+            tabsHtml += `
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link ${isActive}" id="${tabId}" data-bs-toggle="tab" 
+                            data-bs-target="#${contentId}" type="button" role="tab">
+                        <span class="tab-avatar" style="background:${color};">${iniciales}</span>
+                        ${empleado.nombre}
+                        <span class="tab-badge">${pendientes + enProceso}</span>
+                    </button>
+                </li>
+            `;
+            
+            // Contenido
+            contentHtml += `
+                <div class="tab-pane fade ${isActive} show" id="${contentId}" role="tabpanel">
+                    <!-- Perfil del empleado -->
+                    <div class="empleado-profile">
+                        <div class="profile-avatar" style="background:${color};">${iniciales}</div>
+                        <div class="profile-info">
+                            <div class="info-item"><span class="label">👤 Nombre:</span> ${empleado.nombre} ${empleado.apellido || ''}</div>
+                            <div class="info-item"><span class="label">📋 Cargo:</span> ${empleado.cargo || 'Sin cargo'}</div>
+                            ${empleado.email ? `<div class="info-item"><span class="label">📧 Email:</span> ${empleado.email}</div>` : ''}
+                            ${empleado.telefono ? `<div class="info-item"><span class="label">📱 Teléfono:</span> ${empleado.telefono}</div>` : ''}
+                        </div>
+                        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                            <span class="md-badge success" style="background:#DCFCE7; color:#166534;">✅ ${completadas} completadas</span>
+                            <span class="md-badge warning" style="background:#FEF3C7; color:#92400E;">⏳ ${enProceso} en proceso</span>
+                            <span class="md-badge danger" style="background:#FEE2E2; color:#991B1B;">📋 ${pendientes} pendientes</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Tabla de tareas -->
+                    <div style="overflow-x:auto;">
+                        <table class="tareas-empleado-table">
+                            <thead>
+                                <tr>
+                                    <th style="min-width:80px;">Recepción</th>
+                                    <th style="min-width:120px;">Responsable</th>
+                                    <th style="min-width:150px;">Tarea</th>
+                                    <th style="min-width:100px;">Entrega</th>
+                                    <th style="min-width:150px;">Detalles</th>
+                                    <th style="min-width:130px;">Status</th>
+                                    <th style="min-width:130px;">Finalización</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-empleado-${empleado.id}">
+                                ${this.renderTareasEmpleado(tareasEmpleado, empleado)}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    ${tareasEmpleado.length === 0 ? `
+                        <div style="text-align:center; padding:30px; color: var(--md-text-secondary);">
+                            <i class="fas fa-inbox" style="font-size:28px; display:block; margin-bottom:8px; opacity:0.15;"></i>
+                            No hay tareas asignadas a este empleado
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        });
+        
+        tabsContainer.innerHTML = tabsHtml;
+        contentContainer.innerHTML = contentHtml;
+    },
+
+    // Renderizar tareas de un empleado
+    renderTareasEmpleado(tareas, empleado) {
+        if (!tareas || tareas.length === 0) return '';
+        
+        const statusMap = {
+            'pendiente': 'Pendiente',
+            'en_progreso': 'En Proceso',
+            'notificado': 'Notificado',
+            'completado': 'Listo'
+        };
+        
+        const statusOptions = ['pendiente', 'notificado', 'en_progreso', 'completado'];
+        
+        return tareas.map(tarea => {
+            const pedido = tarea.pedidos || {};
+            const cliente = pedido.clientes || {};
+            const fechaRecepcion = pedido.fecha_solicitud ? new Date(pedido.fecha_solicitud).toLocaleDateString('es-ES') : '-';
+            const fechaEntrega = pedido.fecha_entrega_prometida ? new Date(pedido.fecha_entrega_prometida).toLocaleDateString('es-ES') : '-';
+            const fechaFin = tarea.fecha_fin ? new Date(tarea.fecha_fin).toLocaleDateString('es-ES') : '-';
+            
+            const responsable = empleado.nombre;
+            const tareaNombre = tarea.tipo_tarea || 'Sin tarea';
+            const detalles = pedido.observaciones || tarea.observaciones || cliente.nombre || 'Sin detalles';
+            
+            return `
+                <tr data-tarea-id="${tarea.id}">
+                    <td>${fechaRecepcion}</td>
+                    <td>${responsable}</td>
+                    <td><strong>${tareaNombre}</strong></td>
+                    <td>${fechaEntrega}</td>
+                    <td style="max-width:150px; word-wrap:break-word;">${detalles}</td>
+                    <td>
+                        <select class="status-select status-${tarea.estado}" 
+                                onchange="App.actualizarStatusTarea(${tarea.id}, this.value, ${empleado.id})">
+                            ${statusOptions.map(opt => `
+                                <option value="${opt}" ${tarea.estado === opt ? 'selected' : ''}>
+                                    ${statusMap[opt]}
+                                </option>
+                            `).join('')}
+                        </select>
+                    </td>
+                    <td>
+                        <span class="status-badge-sm ${tarea.estado}">
+                            ${tarea.estado === 'completado' ? fechaFin : 'En curso'}
+                        </span>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    },
+
+    // Actualizar status de una tarea
+    async actualizarStatusTarea(tareaId, nuevoStatus, empleadoId) {
+        try {
+            console.log(`🔄 Actualizando tarea ${tareaId} a ${nuevoStatus}`);
+            
+            const updateData = {
+                estado: nuevoStatus,
+                updated_at: new Date().toISOString()
+            };
+            
+            // Si se marca como completado, registrar fecha de finalización
+            if (nuevoStatus === 'completado') {
+                updateData.fecha_fin = new Date().toISOString();
+                updateData.completada = true;
+            }
+            
+            const { error } = await supabaseClient
+                .from('tareas')
+                .update(updateData)
+                .eq('id', tareaId);
+            
+            if (error) throw error;
+            
+            // Actualizar también el estado en el pedido si está relacionado
+            const { data: tarea } = await supabaseClient
+                .from('tareas')
+                .select('pedido_id')
+                .eq('id', tareaId)
+                .single();
+            
+            if (tarea && tarea.pedido_id) {
+                await supabaseClient
+                    .from('pedidos')
+                    .update({
+                        estado: nuevoStatus === 'completado' ? 'entregado' : 'en_produccion',
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', tarea.pedido_id);
+            }
+            
+            // Actualizar eficiencia del empleado
+            await this.calcularEficienciaEmpleado(empleadoId);
+            
+            ToastSystem.success('✅ Actualizado', `Tarea #${tareaId} cambiada a ${nuevoStatus}`);
+            
+            // Recargar datos del dashboard y empleados
+            await this.refrescarDatos();
+            await this.cargarEmpleadosYTareas();
+            
+        } catch (error) {
+            console.error('❌ Error actualizando tarea:', error);
+            ToastSystem.error('Error', 'No se pudo actualizar la tarea');
+        }
+    },
+
+    // Calcular eficiencia de un empleado específico
+    async calcularEficienciaEmpleado(empleadoId) {
+        try {
+            const { data: tareas, error } = await supabaseClient
+                .from('tareas')
+                .select('*')
+                .eq('empleado_id', empleadoId);
+            
+            if (error) throw error;
+            
+            const total = tareas.length;
+            const completadas = tareas.filter(t => t.estado === 'completado').length;
+            const pendientes = tareas.filter(t => t.estado === 'pendiente').length;
+            const enProgreso = tareas.filter(t => t.estado === 'en_progreso').length;
+            
+            const tasaExito = total > 0 ? Math.round((completadas / total) * 100) : 0;
+            
+            await supabaseClient
+                .from('eficiencia_empleados')
+                .upsert({
+                    empleado_id: empleadoId,
+                    fecha: new Date().toISOString().split('T')[0],
+                    tareas_completadas: completadas,
+                    tareas_pendientes: pendientes,
+                    tareas_retrasadas: 0,
+                    tasa_exito: tasaExito
+                }, { onConflict: 'empleado_id, fecha' });
+            
+        } catch (error) {
+            console.error('Error calculando eficiencia:', error);
+        }
+    },
+
+    // ==========================================
+    // SUPABASE REALTIME
     // ==========================================
     suscribirRealtime() {
         try {
@@ -557,6 +867,7 @@ const App = {
                     (payload) => {
                         console.log('🔄 Cambio detectado en tareas:', payload);
                         this.cargarEficiencia();
+                        this.cargarEmpleadosYTareas();
                     }
                 )
                 .subscribe((status, err) => {
@@ -573,7 +884,7 @@ const App = {
     },
 
     // ==========================================
-    // EFICIENCIA DE EMPLEADOS
+    // EFICIENCIA DE EMPLEADOS (Vista general)
     // ==========================================
     async cargarEficiencia() {
         try {
@@ -585,37 +896,25 @@ const App = {
                 tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:40px; color: var(--md-text-secondary);"><i class="fas fa-inbox" style="font-size:32px; display:block; margin-bottom:12px; opacity:0.15;"></i>No hay empleados registrados</td></tr>`;
                 return;
             }
-            let totalExito = 0, totalEficiencia = 0, totalEmpleados = 0, mejorEmpleado = '', mejorTasa = 0;
+            let totalExito = 0, totalEmpleados = 0, mejorEmpleado = '', mejorTasa = 0;
             let html = '';
             for (const empleado of empleados) {
                 const { data: tareas, error: errorTareas } = await supabaseClient.from('tareas').select('*').eq('empleado_id', empleado.id);
                 if (errorTareas) continue;
                 const totalTareas = tareas.length;
-                const tareasCompletadas = tareas.filter(t => t.estado === 'entregado' || t.completada === true).length;
-                const tareasPendientes = tareas.filter(t => t.estado !== 'entregado' && t.completada !== true).length;
-                const tareasRetrasadas = tareas.filter(t => { if (t.completada !== true && t.estado !== 'entregado') return false; if (!t.fecha_fin_real || !t.fecha_fin) return false; return new Date(t.fecha_fin_real) > new Date(t.fecha_fin); }).length;
-                const tareasATiempo = tareas.filter(t => { if (t.completada !== true && t.estado !== 'entregado') return false; if (!t.fecha_fin_real || !t.fecha_fin) return false; return new Date(t.fecha_fin_real) <= new Date(t.fecha_fin); }).length;
-                let tasaExito = 0;
-                if (tareasCompletadas > 0) tasaExito = (tareasATiempo / tareasCompletadas) * 100;
-                let tasaEficiencia = 0;
-                if (totalTareas > 0) tasaEficiencia = (tareasCompletadas / totalTareas) * 100;
-                const tareasCompletadasList = tareas.filter(t => t.completada === true || t.estado === 'entregado');
-                let tiempoEstimadoProm = 0, tiempoRealProm = 0;
-                if (tareasCompletadasList.length > 0) {
-                    tiempoEstimadoProm = Math.round(tareasCompletadasList.reduce((sum, t) => sum + (t.tiempo_estimado_minutos || 0), 0) / tareasCompletadasList.length);
-                    tiempoRealProm = Math.round(tareasCompletadasList.reduce((sum, t) => sum + (t.tiempo_real_minutos || 0), 0) / tareasCompletadasList.length);
-                }
+                const tareasCompletadas = tareas.filter(t => t.estado === 'completado' || t.completada === true).length;
+                const tareasPendientes = tareas.filter(t => t.estado !== 'completado' && t.completada !== true).length;
+                let tasaExito = totalTareas > 0 ? Math.round((tareasCompletadas / totalTareas) * 100) : 0;
                 let eficienciaClass = '', eficienciaLabel = '', progressClass = '';
                 if (tasaExito >= 90) { eficienciaClass = 'success'; eficienciaLabel = 'Excelente 🏆'; progressClass = 'success'; }
                 else if (tasaExito >= 70) { eficienciaClass = 'primary'; eficienciaLabel = 'Bueno 👍'; progressClass = 'primary'; }
                 else if (tasaExito >= 50) { eficienciaClass = 'warning'; eficienciaLabel = 'Regular ⚠️'; progressClass = 'warning'; }
                 else if (tasaExito > 0) { eficienciaClass = 'danger'; eficienciaLabel = 'Necesita Mejorar 🔴'; progressClass = 'danger'; }
-                else if (tasaEficiencia > 0) { eficienciaClass = 'warning'; eficienciaLabel = 'Sin Éxito 📊'; progressClass = 'warning'; }
                 else { eficienciaClass = 'default'; eficienciaLabel = 'Sin Datos 📊'; progressClass = 'default'; }
-                const barraExito = Math.round(tasaExito);
-                html += `<tr><td><strong style="color: var(--md-text);">${empleado.nombre} ${empleado.apellido || ''}</strong></td><td>${empleado.cargo || 'Sin cargo'}</td><td><span class="md-badge success">${tareasCompletadas}</span></td><td><span class="md-badge warning">${tareasPendientes}</span></td><td><span class="md-badge danger">${tareasRetrasadas}</span></td><td><div style="display:flex; align-items:center; gap:12px;"><div class="md-progress" style="width:100px;"><div class="progress-fill ${progressClass}" style="width:${barraExito}%;"></div></div><span style="font-weight:600; font-size:14px; min-width:40px;">${barraExito}%</span></div></td><td>${tiempoEstimadoProm > 0 ? `${tiempoEstimadoProm} min` : '-'}</td><td>${tiempoRealProm > 0 ? `${tiempoRealProm} min` : '-'}</td><td><span class="md-badge ${eficienciaClass}">${eficienciaLabel}</span></td></tr>`;
+                html += `<tr><td><strong>${empleado.nombre} ${empleado.apellido || ''}</strong></td><td>${empleado.cargo || 'Sin cargo'}</td><td><span class="md-badge success">${tareasCompletadas}</span></td><td><span class="md-badge warning">${tareasPendientes}</span></td><td>0</td><td><div style="display:flex; align-items:center; gap:12px;"><div class="md-progress" style="width:100px;"><div class="progress-fill ${progressClass}" style="width:${tasaExito}%;"></div></div><span style="font-weight:600; font-size:14px; min-width:40px;">${tasaExito}%</span></div></td><td>-</td><td>-</td><td><span class="md-badge ${eficienciaClass}">${eficienciaLabel}</span></td></tr>`;
                 if (tareasCompletadas > 0) {
-                    totalExito += tasaExito; totalEficiencia += tasaEficiencia; totalEmpleados++;
+                    totalExito += tasaExito;
+                    totalEmpleados++;
                     if (tasaExito > mejorTasa) { mejorTasa = tasaExito; mejorEmpleado = `${empleado.nombre} ${empleado.apellido || ''}`; }
                 }
             }
@@ -631,7 +930,7 @@ const App = {
     },
 
     // ==========================================
-    // CALCULAR EFICIENCIA
+    // CALCULAR EFICIENCIA TODOS
     // ==========================================
     async calcularEficienciaTodos() {
         try {
@@ -642,32 +941,17 @@ const App = {
             for (const emp of empleados) {
                 const { data: tareas, error: errorTareas } = await supabaseClient.from('tareas').select('*').eq('empleado_id', emp.id);
                 if (errorTareas) continue;
-                const totalTareas = tareas.length;
-                const tareasCompletadas = tareas.filter(t => t.estado === 'entregado' || t.completada === true).length;
-                const tareasPendientes = tareas.filter(t => t.estado !== 'entregado' && t.completada !== true).length;
-                const tareasRetrasadas = tareas.filter(t => { if (t.completada !== true && t.estado !== 'entregado') return false; if (!t.fecha_fin_real || !t.fecha_fin) return false; return new Date(t.fecha_fin_real) > new Date(t.fecha_fin); }).length;
-                const tareasATiempo = tareas.filter(t => { if (t.completada !== true && t.estado !== 'entregado') return false; if (!t.fecha_fin_real || !t.fecha_fin) return false; return new Date(t.fecha_fin_real) <= new Date(t.fecha_fin); }).length;
-                let tasaExito = 0;
-                if (tareasCompletadas > 0) tasaExito = (tareasATiempo / tareasCompletadas) * 100;
-                let tasaEficiencia = 0;
-                if (totalTareas > 0) tasaEficiencia = (tareasCompletadas / totalTareas) * 100;
-                const tareasCompletadasList = tareas.filter(t => t.completada === true || t.estado === 'entregado');
-                let tiempoEstimadoProm = 0, tiempoRealProm = 0;
-                if (tareasCompletadasList.length > 0) {
-                    tiempoEstimadoProm = Math.round(tareasCompletadasList.reduce((sum, t) => sum + (t.tiempo_estimado_minutos || 0), 0) / tareasCompletadasList.length);
-                    tiempoRealProm = Math.round(tareasCompletadasList.reduce((sum, t) => sum + (t.tiempo_real_minutos || 0), 0) / tareasCompletadasList.length);
-                }
+                const total = tareas.length;
+                const completadas = tareas.filter(t => t.estado === 'completado' || t.completada === true).length;
+                const pendientes = tareas.filter(t => t.estado !== 'completado' && t.completada !== true).length;
+                const tasaExito = total > 0 ? Math.round((completadas / total) * 100) : 0;
                 await supabaseClient.from('eficiencia_empleados').upsert({
                     empleado_id: emp.id,
                     fecha: new Date().toISOString().split('T')[0],
-                    tareas_completadas: tareasCompletadas,
-                    tareas_pendientes: tareasPendientes,
-                    tareas_retrasadas: tareasRetrasadas,
-                    tareas_a_tiempo: tareasATiempo,
-                    tiempo_promedio_estimado: tiempoEstimadoProm,
-                    tiempo_promedio_real: tiempoRealProm,
-                    tasa_exito: Math.round(tasaExito),
-                    tasa_eficiencia: Math.round(tasaEficiencia)
+                    tareas_completadas: completadas,
+                    tareas_pendientes: pendientes,
+                    tareas_retrasadas: 0,
+                    tasa_exito: tasaExito
                 }, { onConflict: 'empleado_id, fecha' });
                 actualizados++;
             }
@@ -1022,4 +1306,4 @@ window.suscribirRealtime = () => App.suscribirRealtime();
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => { App.init(); });
 window.addEventListener('beforeunload', () => { App.destroy(); });
-console.log('✅ Dashboard INVEMEX v4.0.0 cargado correctamente');
+console.log('✅ Dashboard INVEMEX v5.0.0 cargado correctamente');
