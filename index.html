@@ -236,17 +236,24 @@
         </div>
 
         <!-- ==========================================
-        SECCIÓN DE EMPLEADOS - PESTAÑAS
+        SECCIÓN DE EMPLEADOS - PANEL DE AVATARES
         ========================================== -->
-        <div class="empleados-tabs">
-            <ul class="nav nav-tabs" id="empleadosTabs" role="tablist">
-                <!-- Las pestañas se generan dinámicamente con JavaScript -->
-            </ul>
-            <div class="tab-content" id="empleadosTabContent">
-                <!-- El contenido de cada pestaña se genera dinámicamente -->
-                <div id="empleados-loading" style="text-align:center; padding:40px; color: var(--md-text-secondary);">
-                    <i class="fas fa-spinner fa-spin" style="font-size:32px; display:block; margin-bottom:12px;"></i>
-                    Cargando información de empleados...
+        <div class="empleados-section">
+            <div class="section-header">
+                <div class="section-title">
+                    <i class="fas fa-users"></i> Equipo de Trabajo
+                    <span class="md-badge primary" id="empleados-total-badge">0</span>
+                </div>
+                <div>
+                    <button class="md-btn md-btn-text md-btn-sm" onclick="App.cargarEmpleadosYTareas();">
+                        <i class="fas fa-sync"></i> Actualizar
+                    </button>
+                </div>
+            </div>
+            <div class="empleados-avatar-grid" id="empleadosAvatarGrid">
+                <div style="text-align:center; padding:20px; width:100%; color: var(--md-text-secondary);">
+                    <i class="fas fa-spinner fa-spin" style="font-size:24px; display:block; margin-bottom:8px;"></i>
+                    Cargando empleados...
                 </div>
             </div>
         </div>
@@ -583,6 +590,33 @@
                     <button type="button" class="md-btn md-btn-outline" data-bs-dismiss="modal">Cerrar</button>
                     <button type="button" class="md-btn md-btn-primary" onclick="App.abrirModalEditarPedido(parseInt(document.getElementById('detalle-pedido-id').textContent.replace('#','')))" data-bs-dismiss="modal">
                         <i class="fas fa-edit"></i> Editar Pedido
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: DETALLE DE EMPLEADO -->
+    <div class="modal fade empleado-modal" id="modalEmpleadoDetalle" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalEmpleadoTitle">
+                        <span class="avatar-lg" style="background:var(--md-primary);">E</span>
+                        Empleado
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="modalEmpleadoBody">
+                    <div style="text-align:center; padding:30px;">
+                        <i class="fas fa-spinner fa-spin" style="font-size:32px; color: var(--md-primary);"></i>
+                        <p style="margin-top:12px; color: var(--md-text-secondary);">Cargando información del empleado...</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="md-btn md-btn-outline" data-bs-dismiss="modal">Cerrar</button>
+                    <button type="button" class="md-btn md-btn-primary" onclick="App.calcularEficienciaEmpleado(parseInt(document.querySelector('.empleado-modal .avatar-lg')?.parentElement?.dataset?.empleadoId || 0))">
+                        <i class="fas fa-chart-line"></i> Calcular Eficiencia
                     </button>
                 </div>
             </div>
