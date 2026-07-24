@@ -1,7 +1,7 @@
 /**
  * ==========================================
  * DASHBOARD INVEMEX - SISTEMA DE GESTIÓN
- * Versión: 4.1.0 - Con Telegram y Supabase Realtime
+ * Versión: 4.0.0
  * ==========================================
  */
 
@@ -12,7 +12,7 @@ const CONFIG = {
     TOAST_DURATION: 4000
 };
 
-console.log('🚀 Iniciando Dashboard INVEMEX v4.1.0');
+console.log('🚀 Iniciando Dashboard INVEMEX v4.0.0');
 
 const supabaseClient = supabase.createClient(
     CONFIG.SUPABASE_URL,
@@ -167,7 +167,7 @@ const App = {
     // INICIALIZACIÓN
     // ==========================================
     async init() {
-        console.log('📋 Inicializando aplicación v4.1.0...');
+        console.log('📋 Inicializando aplicación v4.0.0...');
         const today = new Date();
         this.calendarState.selectedDate = new Date(today);
         this.calendarState.currentDate = new Date(today);
@@ -479,7 +479,6 @@ const App = {
                             <button class="md-btn md-btn-text md-btn-sm" onclick="event.stopPropagation(); App.abrirModalEditarPedido(${pedido.id})"><i class="fas fa-edit"></i></button>
                             <button class="md-btn md-btn-text md-btn-sm" onclick="event.stopPropagation(); App.completarPedido(${pedido.id})" style="color:#22C55E;"><i class="fas fa-check"></i></button>
                             <button class="md-btn md-btn-text md-btn-sm" onclick="event.stopPropagation(); App.eliminarPedido(${pedido.id})" style="color:#EF4444;"><i class="fas fa-trash"></i></button>
-                            <button class="md-btn md-btn-text md-btn-sm" onclick="event.stopPropagation(); App.sincronizarEstadoTelegram(${pedido.id}, 'entregado')" style="color:#0088cc;"><i class="fab fa-telegram-plane"></i></button>
                         </td>
                     </tr>
                 `;
@@ -534,58 +533,6 @@ const App = {
     },
 
     // ==========================================
-    // TELEGRAM - ENVIAR COMANDO
-    // ==========================================
-    async enviarComandoTelegram(comando) {
-        try {
-            ToastSystem.warning('📤 Enviando', `Enviando comando: ${comando}`);
-            const response = await fetch('https://bit64.app.n8n.cloud/webhook-telegram-invemex', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    message: { chat: { id: 6888857160 }, text: comando, from: { first_name: 'Dashboard' } }
-                })
-            });
-            if (response.ok) {
-                ToastSystem.success('✅ Enviado', `Comando ${comando} enviado a Telegram`);
-            } else {
-                ToastSystem.error('❌ Error', 'No se pudo enviar el comando');
-            }
-        } catch (error) {
-            console.error('Error enviando comando:', error);
-            ToastSystem.error('❌ Error', error.message);
-        }
-    },
-
-    // ==========================================
-    // TELEGRAM - OBTENER DATOS
-    // ==========================================
-    async obtenerDatosTelegram() {
-        try {
-            ToastSystem.warning('🔄 Cargando', 'Obteniendo datos desde Telegram...');
-            await fetch('https://bit64.app.n8n.cloud/webhook-telegram-invemex', { method: 'GET' });
-            await this.refrescarDatos();
-            ToastSystem.success('✅ Actualizado', 'Datos sincronizados con Telegram');
-        } catch (error) {
-            console.error('Error obteniendo datos:', error);
-            ToastSystem.error('❌ Error', error.message);
-        }
-    },
-
-    // ==========================================
-    // TELEGRAM - SINCRONIZAR ESTADO
-    // ==========================================
-    async sincronizarEstadoTelegram(idPedido, nuevoEstado) {
-        try {
-            await this.enviarComandoTelegram(`/estado ${idPedido} ${nuevoEstado}`);
-            ToastSystem.success('✅ Sincronizado', `Pedido #${idPedido} actualizado a ${nuevoEstado}`);
-        } catch (error) {
-            console.error('Error sincronizando:', error);
-            ToastSystem.error('❌ Error', error.message);
-        }
-    },
-
-    // ==========================================
     // SUPABASE REALTIME - ACTUALIZACIONES EN VIVO
     // ==========================================
     suscribirRealtime() {
@@ -622,34 +569,6 @@ const App = {
                 });
         } catch (error) {
             console.error('❌ Error suscribiendo a Realtime:', error);
-        }
-    },
-
-    // ==========================================
-    // RECIBIR ACTUALIZACIONES DESDE n8n
-    // ==========================================
-    async procesarActualizacion(data) {
-        try {
-            ToastSystem.info('🔄 Actualizando', 'Recibiendo datos desde Telegram...');
-            if (data.comando === '/estado' || data.accion === 'actualizar_kpi') {
-                await this.cargarKPI();
-                ToastSystem.success('✅ Actualizado', 'KPI actualizados desde Telegram');
-            }
-            if (data.comando === '/pedidos' || data.accion === 'actualizar_pedidos') {
-                await this.cargarPedidosUrgentes();
-                ToastSystem.success('✅ Actualizado', 'Pedidos actualizados desde Telegram');
-            }
-            if (data.accion === 'cambiar_estado' && data.idPedido) {
-                await this.refrescarDatos();
-                ToastSystem.success('✅ Sincronizado', `Pedido #${data.idPedido} actualizado`);
-            }
-            if (data.accion === 'refresh_completo') {
-                await this.refrescarDatos();
-                ToastSystem.success('✅ Sincronizado', 'Dashboard actualizado completamente');
-            }
-        } catch (error) {
-            console.error('Error procesando actualización:', error);
-            ToastSystem.error('❌ Error', error.message);
         }
     },
 
@@ -1096,9 +1015,6 @@ window.closeCalendar = () => App.closeCalendar();
 window.calendarNavigate = (delta) => App.calendarNavigate(delta);
 window.calendarGoToday = () => App.calendarGoToday();
 window.selectDate = (year, month, day) => App.selectDate(year, month, day);
-window.enviarComandoTelegram = (comando) => App.enviarComandoTelegram(comando);
-window.obtenerDatosTelegram = () => App.obtenerDatosTelegram();
-window.sincronizarEstadoTelegram = (id, estado) => App.sincronizarEstadoTelegram(id, estado);
 window.suscribirRealtime = () => App.suscribirRealtime();
 
 // ==========================================
@@ -1106,4 +1022,4 @@ window.suscribirRealtime = () => App.suscribirRealtime();
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => { App.init(); });
 window.addEventListener('beforeunload', () => { App.destroy(); });
-console.log('✅ Dashboard INVEMEX v4.1.0 cargado correctamente');
+console.log('✅ Dashboard INVEMEX v4.0.0 cargado correctamente');
