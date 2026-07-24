@@ -228,10 +228,7 @@ body {
 .md-calendar-footer .today-btn:hover { background: var(--md-primary-light); }
 .md-calendar-overlay {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    top: 0; left: 0; right: 0; bottom: 0;
     z-index: 999;
     display: none;
 }
@@ -771,6 +768,198 @@ body {
 .bar-item .fa-hotjar { color: #8E44AD; }
 .bar-item .fa-user-tie { color: #E74C8B; }
 
+/* ==========================================
+   TABS - EMPLEADOS
+========================================== */
+.empleados-tabs {
+    margin-top: 24px;
+    background: var(--md-white);
+    border-radius: var(--md-radius-medium);
+    box-shadow: var(--md-elevation-1);
+    overflow: hidden;
+    border: 1px solid rgba(0,0,0,0.04);
+}
+
+.empleados-tabs .nav-tabs {
+    border-bottom: 2px solid var(--md-gray-dark);
+    padding: 0 16px;
+    background: var(--md-gray);
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 4px;
+}
+
+.empleados-tabs .nav-tabs .nav-link {
+    border: none;
+    border-radius: 0;
+    padding: 14px 20px;
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--md-text-secondary);
+    transition: var(--md-transition);
+    white-space: nowrap;
+    position: relative;
+    font-family: 'Nunito', sans-serif;
+}
+
+.empleados-tabs .nav-tabs .nav-link:hover {
+    color: var(--md-primary);
+    background: rgba(11,33,139,0.04);
+}
+
+.empleados-tabs .nav-tabs .nav-link.active {
+    color: var(--md-primary);
+    background: transparent;
+    border-bottom: 3px solid var(--md-primary);
+}
+
+.empleados-tabs .nav-tabs .nav-link .tab-badge {
+    display: inline-block;
+    background: var(--md-primary-light);
+    color: var(--md-primary);
+    border-radius: 50px;
+    padding: 1px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    margin-left: 8px;
+}
+
+.empleados-tabs .nav-tabs .nav-link .tab-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 12px;
+    margin-right: 8px;
+    color: white;
+}
+
+.empleados-tabs .tab-content {
+    padding: 20px 24px;
+}
+
+/* Perfil del empleado */
+.empleado-profile {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 16px 20px;
+    background: var(--md-primary-light);
+    border-radius: var(--md-radius-small);
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.empleado-profile .profile-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 24px;
+    color: white;
+    flex-shrink: 0;
+}
+
+.empleado-profile .profile-info {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 24px;
+    flex: 1;
+}
+
+.empleado-profile .profile-info .info-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    color: var(--md-text);
+}
+
+.empleado-profile .profile-info .info-item .label {
+    font-weight: 600;
+    color: var(--md-text-secondary);
+}
+
+/* Tabla de tareas del empleado */
+.tareas-empleado-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.tareas-empleado-table thead th {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--md-text-secondary);
+    border-bottom: 2px solid var(--md-gray-dark);
+    background: var(--md-gray);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+}
+
+.tareas-empleado-table tbody td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--md-gray-dark);
+    vertical-align: middle;
+    color: var(--md-text);
+}
+
+.tareas-empleado-table tbody tr:hover {
+    background: var(--md-primary-light);
+}
+
+.tareas-empleado-table .status-select {
+    padding: 4px 8px;
+    border-radius: var(--md-radius-small);
+    border: 2px solid var(--md-gray-dark);
+    font-size: 12px;
+    font-weight: 600;
+    font-family: 'Nunito', sans-serif;
+    cursor: pointer;
+    transition: var(--md-transition);
+    background: var(--md-white);
+    color: var(--md-text);
+    min-width: 120px;
+}
+
+.tareas-empleado-table .status-select:focus {
+    border-color: var(--md-primary);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(11,33,139,0.1);
+}
+
+.tareas-empleado-table .status-select.status-pendiente { border-color: #F59E0B; color: #92400E; }
+.tareas-empleado-table .status-select.status-notificado { border-color: #3B82F6; color: #1E40AF; }
+.tareas-empleado-table .status-select.status-proceso { border-color: #8B5CF6; color: #6D28D9; }
+.tareas-empleado-table .status-select.status-listo { border-color: #22C55E; color: #166534; }
+
+/* Badge de status en tabla */
+.status-badge-sm {
+    display: inline-block;
+    padding: 2px 12px;
+    border-radius: 50px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.status-badge-sm.pendiente { background: #FEF3C7; color: #92400E; }
+.status-badge-sm.notificado { background: #DBEAFE; color: #1E40AF; }
+.status-badge-sm.proceso { background: #EDE9FE; color: #6D28D9; }
+.status-badge-sm.listo { background: #DCFCE7; color: #166534; }
+
 /* RESPONSIVE */
 @media (max-width: 1024px) { .md-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 768px) {
@@ -786,6 +975,14 @@ body {
     .md-calendar-dropdown { min-width: 280px; right: -80px; transform-origin: top center; }
     .md-calendar-grid .day { font-size: 13px; padding: 4px; }
     .detail-card .detail-value { font-size: 13px; }
+    .empleados-tabs .nav-tabs { padding: 0 8px; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .empleados-tabs .nav-tabs .nav-link { padding: 10px 14px; font-size: 12px; }
+    .empleados-tabs .tab-content { padding: 12px 14px; overflow-x: auto; }
+    .empleado-profile { flex-direction: column; align-items: flex-start; text-align: left; }
+    .empleado-profile .profile-info { flex-direction: column; gap: 4px; }
+    .tareas-empleado-table { font-size: 12px; min-width: 600px; }
+    .tareas-empleado-table thead th, .tareas-empleado-table tbody td { padding: 8px 10px; }
+    .tareas-empleado-table .status-select { min-width: 100px; font-size: 11px; }
 }
 @media (max-width: 480px) {
     .md-toolbar-brand .brand-text { font-size: 18px; }
@@ -796,4 +993,9 @@ body {
     .md-btn-primary, .md-btn-secondary, .md-btn-outline { font-size: 12px; padding: 6px 14px; }
     .detail-card { padding: var(--md-spacing-3); }
     .detail-card .detail-value { font-size: 12px; }
+    .empleados-tabs .nav-tabs .nav-link { font-size: 11px; padding: 8px 10px; }
+    .empleados-tabs .nav-tabs .nav-link .tab-avatar { width: 22px; height: 22px; font-size: 10px; }
+    .empleados-tabs .nav-tabs .nav-link .tab-badge { font-size: 9px; padding: 1px 6px; }
+    .tareas-empleado-table { font-size: 11px; min-width: 500px; }
+    .tareas-empleado-table .status-select { min-width: 80px; font-size: 10px; }
 }
