@@ -19,23 +19,17 @@
 </head>
 <body>
 
-    <!-- ==========================================
-    TOAST CONTAINER
-    ========================================== -->
+    <!-- TOAST -->
     <div class="md-toast-container" id="toast-container"></div>
 
-    <!-- ==========================================
-    LOADING OVERLAY
-    ========================================== -->
+    <!-- LOADING -->
     <div class="md-loading-overlay" id="loading-overlay">
         <div class="md-loading-spinner"></div>
         <div class="md-loading-text" id="loading-text">INVEMEX • Conectando con Supabase...</div>
         <div id="error-container" style="margin-top: 16px;"></div>
     </div>
 
-    <!-- ==========================================
-    DASHBOARD
-    ========================================== -->
+    <!-- DASHBOARD -->
     <div id="dashboard" style="display: none;">
 
         <!-- TOOLBAR -->
@@ -45,7 +39,6 @@
                 <span class="brand-text">INVEMEX</span>
             </a>
             <div class="md-toolbar-actions">
-                <!-- CALENDARIO -->
                 <div class="md-calendar-wrapper">
                     <span class="md-chip" id="fecha-actual" style="cursor: pointer;" onclick="App.toggleCalendar()">
                         <i class="far fa-calendar-alt"></i>
@@ -68,14 +61,10 @@
                         </div>
                     </div>
                 </div>
-
-                <!-- NOTIFICACIONES -->
                 <span class="md-chip" style="cursor: pointer;" onclick="App.mostrarNotificaciones()">
                     <i class="fas fa-bell"></i>
                     <span class="chip-dot" id="notificaciones-badge" style="background: #EF4444; color: white; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 10px;">0</span>
                 </span>
-
-                <!-- USUARIO -->
                 <div class="md-avatar" onclick="App.mostrarNotificaciones()">L</div>
             </div>
         </header>
@@ -246,7 +235,23 @@
             </div>
         </div>
 
-        <!-- BOTONES RÁPIDOS (SOLO ACCIONES DEL SISTEMA) -->
+        <!-- ==========================================
+        SECCIÓN DE EMPLEADOS - PESTAÑAS
+        ========================================== -->
+        <div class="empleados-tabs">
+            <ul class="nav nav-tabs" id="empleadosTabs" role="tablist">
+                <!-- Las pestañas se generan dinámicamente con JavaScript -->
+            </ul>
+            <div class="tab-content" id="empleadosTabContent">
+                <!-- El contenido de cada pestaña se genera dinámicamente -->
+                <div id="empleados-loading" style="text-align:center; padding:40px; color: var(--md-text-secondary);">
+                    <i class="fas fa-spinner fa-spin" style="font-size:32px; display:block; margin-bottom:12px;"></i>
+                    Cargando información de empleados...
+                </div>
+            </div>
+        </div>
+
+        <!-- BOTONES RÁPIDOS -->
         <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center; margin-top:16px;">
             <button class="md-btn md-btn-primary" onclick="App.abrirModalNuevoPedido();">
                 <i class="fas fa-plus"></i> Nuevo Pedido
@@ -584,9 +589,7 @@
         </div>
     </div>
 
-    <!-- ==========================================
-    SCRIPTS
-    ========================================== -->
+    <!-- SCRIPTS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="js/dashboardInvemex.js"></script>
